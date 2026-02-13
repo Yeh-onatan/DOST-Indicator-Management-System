@@ -62,10 +62,12 @@ class UsersSeeder extends Seeder
             User::updateOrCreate(
                 ['username' => $u['username']], // Check uniqueness by username
                 [
-                    'name'     => $u['name'],
-                    'email'    => $u['email'],
-                    'role'     => $u['role'],
-                    'password' => $password,
+                    'name'                         => $u['name'],
+                    'email'                        => $u['email'],
+                    'role'                         => $u['role'],
+                    'password'                     => $password,
+                    'email_notifications_enabled'  => true,
+                    'is_locked'                    => false,
                 ]
             );
         }

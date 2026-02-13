@@ -82,7 +82,7 @@ class StrategicPlanObjectiveSeeder extends Seeder
                     'reporting_agency'     => $row['reporting_agency'],
                     'submitted_by_user_id' => $userId,
                     'admin_name'           => 'Seeder',
-                    'status'               => 'DRAFT',
+                    'status'               => 'draft',
                     'updated_by'           => $userId,
                     'created_at'           => $now,
                     'updated_at'           => $now,
