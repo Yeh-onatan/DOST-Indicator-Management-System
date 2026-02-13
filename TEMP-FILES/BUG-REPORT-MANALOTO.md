@@ -37,21 +37,24 @@ This codebase has fundamental architectural problems and is **NOT production-rea
 
 ## SECTION 1: CRITICAL ISSUES (BLOCKING PRODUCTION)
 
-### 1.1 Two Models Competing for the Same Table
+### ~~1.1 Two Models Competing for the Same Table~~ ✅ FIXED
 
 **Files:** [app/Models/Indicator.php](http://app/Models/Indicator.php), [app/Models/Objective.php](http://app/Models/Objective.php)  
 **Severity:** CRITICAL \- CODE DUPLICATION  
 **Impact:** Maintenance nightmare, conflicting behavior, bugs propagate to both
 
-Both files are 900+ lines and reference the same `objectives` database table. They have nearly identical code but with different logic. Any fix must be manually copied to both models.
+**STATUS: FIXED (February 13, 2026)**  
+Indicator.php converted to thin alias that extends Objective.php. All logic consolidated in Objective.php (the canonical model). Backward compatibility maintained for existing code that imports `App\Models\Indicator`.
 
-**Example conflicts:**
+~~Both files are 900+ lines and reference the same `objectives` database table. They have nearly identical code but with different logic. Any fix must be manually copied to both models.~~
 
-- `Indicator.php` line 181 has `getRegionAttribute()` accessor (causes N+1 queries)  
-- `Objective.php` may or may not have the same logic  
-- Different relationship names/logic between files
+~~**Example conflicts:**~~
 
-**Fix:** Merge into one model. Use an alias or wrapper for the other name. Conduct a side-by-side diff first.
+~~- `Indicator.php` line 181 has `getRegionAttribute()` accessor (causes N+1 queries)~~  
+~~- `Objective.php` may or may not have the same logic~~  
+~~- Different relationship names/logic between files~~
+
+~~**Fix:** Merge into one model. Use an alias or wrapper for the other name. Conduct a side-by-side diff first.~~
 
 ---
 
@@ -91,20 +94,23 @@ Migrations reference `WorkflowStage` model but the model file doesn't exist. Any
 
 ---
 
-### 1.4 Type Hint References Non-Existent Class
+### ~~1.4 Type Hint References Non-Existent Class~~ ✅ FIXED
 
 **File:** [app/Models/User.php](http://app/Models/User.php#L235)  
 **Line:** 235  
 **Severity:** CRITICAL \- PHP CRASH  
 **Impact:** Method crashes when called.
 
-public function canReviewAgency(?Agency $agency)  // Class 'Agency' does not exist
+**STATUS: FIXED (February 13, 2026)**  
+Method does not exist in current codebase. Verified User.php has no `canReviewAgency()` method. Issue appears to have been removed during previous refactoring.
 
-The class is named `DOSTAgency`, not `Agency`. PHP will crash with fatal error when this method is called.
+~~public function canReviewAgency(?Agency $agency)  // Class 'Agency' does not exist~~
 
-**Fix:** Change to:
+~~The class is named `DOSTAgency`, not `Agency`. PHP will crash with fatal error when this method is called.~~
 
-public function canReviewAgency(?DOSTAgency $agency)
+~~**Fix:** Change to:~~
+
+~~public function canReviewAgency(?DOSTAgency $agency)~~
 
 ---
 

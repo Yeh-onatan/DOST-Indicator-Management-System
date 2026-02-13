@@ -163,8 +163,12 @@ class User extends Authenticatable
         }
 
         // Check 2: Is assigned as head of any office
-        if ($this->office_id && $this->office && $this->office->head_user_id === $this->id) {
-            return true;
+        // Use loadMissing to avoid lazy loading violations
+        if ($this->office_id) {
+            $this->loadMissing('office');
+            if ($this->office && $this->office->head_user_id === $this->id) {
+                return true;
+            }
         }
 
         return false;
@@ -175,6 +179,7 @@ class User extends Authenticatable
      */
     public function getHeadOfOffice(): ?Office
     {
+        $this->loadMissing('office');
         if ($this->office && $this->office->head_user_id === $this->id) {
             return $this->office;
         }
