@@ -31,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\TrustProxies::class,
             // Security headers
             \App\Http\Middleware\SecurityHeaders::class,
+            // Eager load user relationships to prevent lazy loading violations
+            \App\Http\Middleware\EagerLoadUserRelationships::class,
         ]);
 
         // Check password expiry for authenticated users

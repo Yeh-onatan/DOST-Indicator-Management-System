@@ -154,6 +154,8 @@ class User extends Authenticatable
     /**
      * Check if user can act as Head of Office (role OR assignment-based)
      * This is the main method to use for all HO permission checks
+     *
+     * Note: Office relationship is eager loaded by EagerLoadUserRelationships middleware
      */
     public function canActAsHeadOfOffice(): bool
     {
@@ -163,12 +165,8 @@ class User extends Authenticatable
         }
 
         // Check 2: Is assigned as head of any office
-        // Use loadMissing to avoid lazy loading violations
-        if ($this->office_id) {
-            $this->loadMissing('office');
-            if ($this->office && $this->office->head_user_id === $this->id) {
-                return true;
-            }
+        if ($this->office_id && $this->office && $this->office->head_user_id === $this->id) {
+            return true;
         }
 
         return false;
@@ -176,10 +174,11 @@ class User extends Authenticatable
 
     /**
      * Get the office this user is head of (if any)
+     *
+     * Note: Office relationship is eager loaded by EagerLoadUserRelationships middleware
      */
     public function getHeadOfOffice(): ?Office
     {
-        $this->loadMissing('office');
         if ($this->office && $this->office->head_user_id === $this->id) {
             return $this->office;
         }

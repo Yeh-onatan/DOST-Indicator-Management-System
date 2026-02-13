@@ -3003,14 +3003,12 @@ class UnifiedDashboard extends Component
     }
 
     public function render()
-    {
-        try {
-            $user = Auth::user();
+        {
+            try {
+                $user = Auth::user();
 
-            // 1. Base Query with Eager Loading
-            $query = Objective::with(['region', 'office', 'submitter.agency', 'chapter', 'pillar', 'outcome', 'strategy']);
-
-            $this->applyScopes($query, $user);
+                // 1. Base Query with Eager Loading
+                $query = Objective::with(['region', 'office', 'submitter.agency', 'submitter.office', 'submitter.region', 'chapter', 'pillar', 'outcome', 'strategy']);            $this->applyScopes($query, $user);
 
             // 3. CALCULATE STATS BEFORE STATUS FILTER (Stats should reflect totals, not filtered by status)
             $statsQuery = clone $query;
@@ -3586,7 +3584,7 @@ class UnifiedDashboard extends Component
     public function export()
     {
         $user = auth()->user();
-        $query = \App\Models\Objective::with(['region', 'office', 'submitter.agency', 'chapter', 'pillar', 'outcome', 'strategy']);
+        $query = \App\Models\Objective::with(['region', 'office', 'submitter.agency', 'submitter.office', 'submitter.region', 'chapter', 'pillar', 'outcome', 'strategy']);
         
         $this->applyScopes($query, $user);
         $this->applyFilters($query);
