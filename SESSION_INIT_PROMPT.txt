@@ -1,0 +1,43 @@
+# Session Init Prompt for GitHub Copilot
+
+**Copy-paste this at the start of each new Copilot session:**
+
+---
+
+I'm working on a Laravel 11 + Livewire 3 M&E (Monitoring & Evaluation) system for DOST Philippines.
+
+## System Overview
+- **Database:** MariaDB 10.4.28, database name: `dbDIMS`, 36 tables
+- **Main Entity:** `Objective` model (was `Indicator`, now merged)
+- **Tech Stack:** Laravel 11, PHP 8.2.4, Livewire 3, Tailwind CSS
+- **Working Directory:** `/Users/keziamiravalles/Documents/nat/code/DOST`
+- **Current Branch:** `mass-debugging`
+
+## Recent Work Completed (Phase 1-2)
+- ✅ Database normalization to 3NF (migration created)
+- ✅ Merged duplicate models (Indicator + Objective → Objective canonical)
+- ✅ Fixed 13 critical bugs (see BUG-REPORT-MANALOTO.md)
+- ✅ Lazy loading fix (N+1 query elimination)
+- ✅ Try-catch wrapping on 20+ Livewire/model methods
+- ✅ Status constants normalization
+
+## Key Architecture Points
+- **Approval Workflow:** PSTO → RO → HO → OUSEC → Admin → SuperAdmin → Approved
+- **Main Dashboard:** `app/Livewire/Dashboard/UnifiedDashboard.php` (3600+ lines)
+- **Objective Model:** `app/Models/Objective.php` (~750 lines canonical model)
+- **Indicator.php:** Thin alias extending Objective (backward compat)
+
+## Important Files to Reference
+- `/CODEBASE_CONTEXT.md` — Full system architecture, bug fixes, gotchas
+- `/BUG-REPORT-MANALOTO.md` — 68+ identified bugs (Phases 3-8 pending)
+- `/REPOSITORY_MIGRATION_GUIDE.md` — Migration conflicts and setup steps
+
+## What I Need Help With
+[Describe your current task here]
+
+---
+
+**After pasting this, reference specific sections:**
+- For architecture questions: "Check CODEBASE_CONTEXT.md section X"
+- For bugs: "See BUG-REPORT-MANALOTO.md Phase Y"
+- For workflow: "See CODEBASE_CONTEXT.md Workflow States section"

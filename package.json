@@ -1,0 +1,47 @@
+{
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "dev": "vite",
+        "test": "playwright test",
+        "test:headed": "playwright test --headed",
+        "test:ui": "playwright test --ui"
+    },
+    "dependencies": {
+        "@tailwindcss/vite": "^4.1.11",
+        "alpinejs": "^3.15.2",
+        "autoprefixer": "^10.4.20",
+        "axios": "^1.7.4",
+        "concurrently": "^9.0.1",
+        "laravel-vite-plugin": "^2.0",
+        "tailwindcss": "^4.0.7",
+        "vite": "^7.0.4"
+    },
+    "optionalDependencies": {
+        "@rollup/rollup-linux-x64-gnu": "4.9.5",
+        "@tailwindcss/oxide-linux-x64-gnu": "^4.0.1",
+        "lightningcss-linux-x64-gnu": "^1.29.1"
+    },
+    "name": "dost_project_matrices",
+    "version": "1.0.0",
+    "description": "npm run dev\r php artisan serve",
+    "main": "vite.config.js",
+    "directories": {
+        "test": "tests"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.58.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Leisanre/private-project-m.git"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/Leisanre/private-project-m/issues"
+    },
+    "homepage": "https://github.com/Leisanre/private-project-m#readme"
+}
