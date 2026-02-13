@@ -1,6 +1,6 @@
 <x-layouts.auth>
-    {{-- Main container: Logo at the top, content starts below it --}}
-    <div class="min-h-screen flex flex-col items-center justify-start pt-16 p-4">
+    {{-- Main container: Logo at the top, content centered --}}
+    <div class="min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden">
         
         {{-- LOGO (Header) --}}
         <div class="flex flex-col items-center mb-8"> 
@@ -16,8 +16,7 @@
         </div>
 
         {{-- Main content area (Form is now transparent/boxless) --}}
-        <div class="w-full max-w-md mt--1"> 
-            
+        <div class="w-full max-w-md">
             {{-- REMOVED: The div containing the H1 heading and the descriptive paragraph --}}
 
             <div class="p-0 space-y-10">

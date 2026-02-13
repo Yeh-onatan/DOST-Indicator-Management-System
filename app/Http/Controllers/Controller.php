@@ -38,7 +38,7 @@ abstract class Controller
     protected function isAdmin(): bool
     {
         $user = $this->user();
-        return $user && in_array($user->role, ['administrator', 'super_admin']);
+        return $user && in_array($user->role, [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN]);
     }
 
     /**

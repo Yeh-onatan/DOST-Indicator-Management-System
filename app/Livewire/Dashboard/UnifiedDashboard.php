@@ -2651,7 +2651,7 @@ class UnifiedDashboard extends Component
         }
 
         // Also notify admins
-        $admins = \App\Models\User::whereIn('role', ['administrator', 'super_admin'])->get();
+        $admins = \App\Models\User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN])->get();
         foreach ($admins as $admin) {
             $admin->notify(new \App\Notifications\ObjectiveStatusChanged($objective->status, $objective, $action, null, Auth::id()));
         }

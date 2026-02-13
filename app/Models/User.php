@@ -76,7 +76,10 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password_changed_at' => 'datetime',
             'password' => 'hashed',
-            'assigned_clusters' => 'array', // Cast JSON to array
+            'assigned_clusters' => 'array',
+            'last_login_at' => 'datetime',
+            'is_locked' => 'boolean',
+            'email_notifications_enabled' => 'boolean',
         ];
     }
 

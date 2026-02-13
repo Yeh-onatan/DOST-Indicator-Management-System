@@ -14,7 +14,9 @@ class Office extends Model
         'parent_office_id',
         'type', // CO/HO, RO, PSTO
         'region_id',
-        'head_user_id', // Added to fix the relationship error
+        'head_user_id',
+        'is_active',
+        'agency_id',
     ];
 
     protected $attributes = [

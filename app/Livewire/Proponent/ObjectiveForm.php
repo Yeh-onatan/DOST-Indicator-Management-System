@@ -121,7 +121,7 @@ class ObjectiveForm extends Component
 
         if (!$this->dost_agency) {
             $role = auth()->user()?->role;
-            if (in_array($role, ['super_admin','administrator'], true)) {
+            if (in_array($role, [User::ROLE_SUPER_ADMIN, User::ROLE_ADMIN], true)) {
                 $this->dost_agency = 'DOST';
             }
         }

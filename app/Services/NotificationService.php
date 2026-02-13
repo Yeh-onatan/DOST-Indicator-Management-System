@@ -108,7 +108,7 @@ class NotificationService
         }
 
         // Also notify Admins/SuperAdmin
-        $admins = User::whereIn('role', ['administrator', 'super_admin'])->get();
+        $admins = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN])->get();
         foreach ($admins as $admin) {
             $this->createNotification(
                 $admin,
@@ -251,7 +251,7 @@ class NotificationService
         $creatorName = $creator->name ?? $creator->username ?? 'System';
 
         // Notify all admins and super admins about the new agency (except creator)
-        $admins = User::whereIn('role', ['administrator', 'super_admin'])
+        $admins = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN])
             ->where('id', '!=', $creator->id)
             ->get();
 
@@ -282,7 +282,7 @@ class NotificationService
         $creatorName = $creator->name ?? $creator->username ?? 'System';
 
         // Notify all admins and super admins about the new office
-        $admins = User::whereIn('role', ['administrator', 'super_admin'])
+        $admins = User::whereIn('role', [User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN])
             ->where('id', '!=', $creator->id) // Don't notify the creator
             ->get();
 

@@ -169,24 +169,15 @@ class Approvals extends Component
             };
 
             // Audit Log
-            \App\Models\AuditLog::create([
-                'actor_user_id' => auth()->id(),
-                'action' => 'approve',
-                'entity_type' => 'Objective',
-                'entity_id' => (string)$objective->id,
-                'changes' => ['status' => $objective->status],
-            ]);
+            \App\Services\AuditService::log(
+                action: 'approve',
+                modelType: 'Objective',
+                modelId: $objective->id,
+                changes: ['status' => $objective->status],
+                actorId: auth()->id()
+            );
 
-            // Notify submitter
-            if ($objective->submitter) {
-                $objective->submitter->notify(new \App\Notifications\ObjectiveStatusChanged(
-                    status: $objective->status,
-                    objective: $objective,
-                    notes: null,
-                    corrections: null,
-                    actorId: auth()->id(),
-                ));
-            }
+            // Notification is sent by the approve() method, no need to send here
 
             $this->reload();
             $this->closeView();
@@ -226,14 +217,14 @@ class Approvals extends Component
             // Use model's reject logic - now creates private notes
             $obj->reject($user, $this->reject_notes);
 
-            // Log audit (don't store rejection_note on objective anymore)
-            \App\Models\AuditLog::create([
-                'actor_user_id' => auth()->id(),
-                'action' => 'reject',
-                'entity_type' => 'Objective',
-                'entity_id' => (string)$obj->id,
-                'changes' => ['status' => 'REJECTED'],
-            ]);
+            // Log audit
+            \App\Services\AuditService::log(
+                action: 'reject',
+                modelType: 'Objective',
+                modelId: $obj->id,
+                changes: ['status' => $obj->status],
+                actorId: auth()->id()
+            );
 
             $this->rejectingId = null;
             $this->reject_fields = '';
