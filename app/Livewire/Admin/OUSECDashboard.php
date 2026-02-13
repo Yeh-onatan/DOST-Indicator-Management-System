@@ -108,25 +108,15 @@ class OUSECDashboard extends Component
             $objective = Objective::findOrFail($id);
             $user = Auth::user();
 
-            // OUSEC approves and forwards to Admin
-            if ($objective->status === Objective::STATUS_SUBMITTED_TO_OUSEC) {
-                $objective->submitToAdmin();
-                $message = 'Approved and forwarded to Administrator.';
-            } elseif ($objective->status === Objective::STATUS_RETURNED_TO_OUSEC) {
-                // OUSEC resubmits to Admin
-                $objective->update(['status' => Objective::STATUS_SUBMITTED_TO_ADMIN]);
-                $message = 'Resubmitted to Administrator.';
-            } else {
-                $this->dispatch('toast', message: 'Cannot approve this indicator in its current state.', type: 'error');
-                return;
-            }
+            // Use the model's approve() method which handles OUSEC → Admin routing
+            // This works for both submitted_to_ousec and returned_to_ousec states
+            $objective->approve($user);
 
-            // Record history
-            $objective->recordHistory('approve', [
-                'status' => Objective::STATUS_SUBMITTED_TO_OUSEC,
-            ], [
-                'status' => $objective->status,
-            ]);
+            $freshStatus = $objective->fresh()->status;
+            $message = match($freshStatus) {
+                Objective::STATUS_SUBMITTED_TO_ADMIN => 'Approved and forwarded to Administrator.',
+                default => 'Action completed.',
+            };
 
             // Audit Log
             \App\Models\AuditLog::create([
@@ -134,7 +124,7 @@ class OUSECDashboard extends Component
                 'action' => 'approve',
                 'entity_type' => 'Objective',
                 'entity_id' => (string)$objective->id,
-                'changes' => ['status' => $objective->status],
+                'changes' => ['status' => $freshStatus],
             ]);
 
             $this->reload();

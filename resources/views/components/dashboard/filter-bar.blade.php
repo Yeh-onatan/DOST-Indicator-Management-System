@@ -53,13 +53,21 @@
             label="Status"
             :options="[
                 '' => 'All Status',
-                'DRAFT' => 'Draft',
+                'draft' => 'Draft',
                 'submitted_to_ro' => 'Submitted to RO',
                 'submitted_to_ho' => 'Submitted to H.O.',
+                'submitted_to_ousec' => 'Submitted to OUSEC',
                 'submitted_to_admin' => 'Submitted to Admin',
                 'submitted_to_superadmin' => 'Submitted to SuperAdmin',
                 'approved' => 'Approved',
-                'rejected' => 'Rejected'
+                'rejected' => 'Rejected',
+                'returned_to_psto' => 'Returned to PSTO',
+                'returned_to_agency' => 'Returned to Agency',
+                'returned_to_ro' => 'Returned to RO',
+                'returned_to_ho' => 'Returned to HO',
+                'returned_to_ousec' => 'Returned to OUSEC',
+                'returned_to_admin' => 'Returned to Admin',
+                'reopened' => 'Reopened',
             ]"
             wireModel="statusFilter"
         />
@@ -68,10 +76,9 @@
         <input wire:model.live.debounce.300ms="search" type="text" placeholder="Search..." class="h-9 px-4 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 focus:ring-[#02aeef] focus:border-[#02aeef] min-w-[200px] flex-1" />
 
         {{-- More Filters Dropdown (for less frequently used filters) --}}
-        <div x-data="{ open: false }" class="relative">
+        <div x-data="{ open: false }" class="relative" @click.outside="open = false">
             <button
                 @click="open = !open"
-                @click.outside="open = false"
                 class="h-9 px-4 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 transition flex items-center gap-2"
             >
                 <span>More</span>
@@ -91,7 +98,8 @@
                 x-transition:leave="transition ease-in duration-75"
                 x-transition:leave-start="transform opacity-100 scale-100"
                 x-transition:leave-end="transform opacity-0 scale-95"
-                class="absolute z-50 mt-2 w-72 rounded-lg shadow-lg bg-white border border-gray-200 p-4"
+                @click.stop
+                class="absolute z-50 mt-2 w-80 rounded-lg shadow-lg bg-white border border-gray-200 p-4"
                 style="display: none;"
             >
                 <div class="space-y-4">
@@ -99,9 +107,18 @@
                     <div>
                         <h4 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</h4>
                         <div class="flex gap-2">
-                            <input type="date" wire:model.live="startDate" class="flex-1 h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:ring-[#02aeef] focus:border-[#02aeef]" placeholder="Start date">
-                            <input type="date" wire:model.live="endDate" class="flex-1 h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:ring-[#02aeef] focus:border-[#02aeef]" placeholder="End date">
+                            <div class="flex-1">
+                                <label class="block text-[10px] text-gray-400 mb-1">From</label>
+                                <input type="date" wire:model.lazy="startDate" class="w-full h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:ring-[#02aeef] focus:border-[#02aeef]">
+                            </div>
+                            <div class="flex-1">
+                                <label class="block text-[10px] text-gray-400 mb-1">To</label>
+                                <input type="date" wire:model.lazy="endDate" class="w-full h-9 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-700 focus:ring-[#02aeef] focus:border-[#02aeef]">
+                            </div>
                         </div>
+                        @if($startDate || $endDate)
+                            <button wire:click="$set('startDate', null); $set('endDate', null)" class="mt-2 text-xs text-red-500 hover:text-red-700">Clear dates</button>
+                        @endif
                     </div>
 
                     {{-- Sort Controls --}}
@@ -111,9 +128,10 @@
                             @php
                                 $sortOptions = [
                                     ['value' => 'created_at', 'label' => 'Date Created'],
+                                    ['value' => 'updated_at', 'label' => 'Last Updated'],
                                     ['value' => 'target_value', 'label' => 'Target Value'],
                                 ];
-                                if ($categoryFilter && strtolower($categoryFilter) === 'strategic plan') {
+                                if ($categoryFilter && strtolower($categoryFilter) === 'strategic_plan') {
                                     $sortOptions[] = ['value' => 'pillar_value', 'label' => 'Pillar'];
                                     $sortOptions[] = ['value' => 'outcome_value', 'label' => 'Outcome'];
                                     $sortOptions[] = ['value' => 'strategy_value', 'label' => 'Strategy'];

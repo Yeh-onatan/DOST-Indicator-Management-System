@@ -53,7 +53,7 @@ class RegionManager extends Component
         }
 
         return view('livewire.admin.region-manager', [
-            'regions' => $query->orderBy('order_index')->paginate(10),
+            'regions' => $query->orderBy('order_index')->paginate(17),
             'users' => User::select('id', 'name')->orderBy('name')->get(),
             // Only show offices that can be assigned (usually PSTOs)
             'availableOffices' => Office::select('id', 'name', 'code', 'region_id')->orderBy('name')->get(),

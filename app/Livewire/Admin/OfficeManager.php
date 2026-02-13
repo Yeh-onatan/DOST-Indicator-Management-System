@@ -46,7 +46,7 @@ class OfficeManager extends Component
         }
 
         return view('livewire.admin.office-manager', [
-            'offices' => $query->orderBy('type')->paginate(10),
+            'offices' => $query->orderBy('type')->paginate(50),
             'regions' => PhilippineRegion::select('id', 'name', 'code')->get(),
             'users' => User::select('id', 'name')->get(),
             'parentOptions' => Office::select('id', 'name', 'type')->whereIn('type', ['HO', 'CO', 'RO'])->get(),

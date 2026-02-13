@@ -132,8 +132,7 @@
                     elseif ($user->role === 'ousec_rd') $ousecRoleName = 'OUSEC-RD';
                     elseif ($user->role === 'ousec_ro') $ousecRoleName = 'OUSEC-RO';
                 @endphp
-                <button wire:click="ousecApprove({{ $objective->id }})"
-                    wire:confirm="Approve and forward to Administrator?"
+                <button wire:click="openApprovalConfirm({{ $objective->id }}, 'ousecApprove')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
                     title="{{ $ousecRoleName }} Approve & Forward to Admin">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -168,8 +167,7 @@
                         $forwardDest = 'OUSEC-RO';
                     }
                 @endphp
-                <button wire:click="approve({{ $objective->id }})"
-                    wire:confirm="Forward to {{ $forwardDest }}?"
+                <button wire:click="openApprovalConfirm({{ $objective->id }}, 'approve')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
                     title="Forward to {{ $forwardDest }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -188,8 +186,7 @@
         @if($user->isAdministrator())
             @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_ADMIN)
                 {{-- Approve (Forward to SuperAdmin) --}}
-                <button wire:click="approve({{ $objective->id }})"
-                    wire:confirm="Forward to SuperAdmin?"
+                <button wire:click="openApprovalConfirm({{ $objective->id }}, 'approve')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
                     title="Forward to SuperAdmin">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -208,8 +205,7 @@
         @if($user->isSuperAdmin())
             @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_SUPERADMIN)
                 {{-- Final Approve (Check) --}}
-                <button wire:click="approve({{ $objective->id }})"
-                    wire:confirm="Give final approval? This will lock the indicator."
+                <button wire:click="openApprovalConfirm({{ $objective->id }}, 'approve')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
                     title="Final Approval">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>

@@ -822,6 +822,15 @@
         :adminConfirmMessage="$adminConfirmMessage"
     />
 
+    {{-- APPROVAL CONFIRMATION MODAL --}}
+    <x-dashboard.modals.approval-confirm-modal
+        :show="$showApprovalConfirmModal"
+        :approvalConfirmAction="$approvalConfirmAction"
+        :approvalConfirmTitle="$approvalConfirmTitle"
+        :approvalConfirmMessage="$approvalConfirmMessage"
+        :approvalConfirmIndicator="$approvalConfirmIndicator"
+    />
+
     {{-- DELETE CONFIRMATION MODAL --}}
     <x-dashboard.modals.delete-confirm-modal
         :show="$showDeleteConfirmModal"

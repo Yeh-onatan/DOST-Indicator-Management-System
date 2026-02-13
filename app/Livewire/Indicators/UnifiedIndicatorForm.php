@@ -288,7 +288,7 @@ class UnifiedIndicatorForm extends Component
             $objective = Objective::find($this->form['id']);
             $this->audit('update', $objective, ['before' => $objective->toArray(), 'after' => $payload]);
 
-            if ($objective->status === 'rejected') {
+            if ($objective->status === Objective::STATUS_REJECTED) {
                 $payload['status'] = Objective::STATUS_DRAFT;
             }
 

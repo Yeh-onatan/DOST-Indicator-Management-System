@@ -173,13 +173,13 @@ class ObjectiveForm extends Component
         ];
 
         // Require proof when editing an approved indicator
-        $isEditingApproved = $this->editingId && $this->status === 'APPROVED';
+        $isEditingApproved = $this->editingId && $this->status === Objective::STATUS_APPROVED;
         if ($isEditingApproved) {
             $step3['proof_file'] = 'required|mimes:pdf,doc,docx,jpg,jpeg,png|max:10240';
         }
 
         $restrict = $this->editingId
-            && ($this->status === 'REJECTED')
+            && ($this->status === Objective::STATUS_REJECTED)
             && is_array($this->corrections_required)
             && count($this->corrections_required) > 0;
 
@@ -565,7 +565,7 @@ class ObjectiveForm extends Component
                     $keys = array_unique(array_merge(array_keys($payload), ['status','review_notes','corrections_required']));
                     $before = $obj->only($keys);
                     
-                    if (($obj->status ?? null) === 'REJECTED') {
+                    if (($obj->status ?? null) === Objective::STATUS_REJECTED) {
                         $obj->status = Objective::STATUS_DRAFT;
                         $obj->review_notes = null;
                         $obj->corrections_required = null;
@@ -575,7 +575,7 @@ class ObjectiveForm extends Component
                     $obj->refresh();
 
                     // Handle proof upload when editing approved indicator
-                    if (($obj->status ?? null) === 'APPROVED' && $this->proof_file) {
+                    if (($obj->status ?? null) === Objective::STATUS_APPROVED && $this->proof_file) {
                         $path = $this->proof_file->store('proofs', 'public');
                         \App\Models\Proof::create([
                             'objective_id' => $obj->id,

@@ -70,6 +70,13 @@ class Objective extends Model
         'rejected_at',
         'approved_by',
         'rejected_by',
+        'agency_id',
+        'dost_agency',
+        'agency_code',
+        'sp_id',
+        'admin_name',
+        'indicator_type',
+        'annual_plan_targets',
     ];
 
     protected $casts = [
@@ -113,9 +120,32 @@ class Objective extends Model
     const STATUS_RETURNED_TO_RO = 'returned_to_ro';
     const STATUS_RETURNED_TO_HO = 'returned_to_ho';
     const STATUS_RETURNED_TO_ADMIN = 'returned_to_admin';
+    const STATUS_REJECTED = 'rejected';
+    const STATUS_REOPENED = 'reopened';
     const STATUS_APPROVED = 'approved';
     const STATUS_SUBMITTED_TO_OUSEC = 'submitted_to_ousec';
     const STATUS_RETURNED_TO_OUSEC = 'returned_to_ousec';
+
+    /**
+     * All valid status values (for validation and reference).
+     */
+    const ALL_STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_SUBMITTED_TO_RO,
+        self::STATUS_RETURNED_TO_PSTO,
+        self::STATUS_RETURNED_TO_AGENCY,
+        self::STATUS_SUBMITTED_TO_HO,
+        self::STATUS_SUBMITTED_TO_ADMIN,
+        self::STATUS_SUBMITTED_TO_SUPERADMIN,
+        self::STATUS_RETURNED_TO_RO,
+        self::STATUS_RETURNED_TO_HO,
+        self::STATUS_RETURNED_TO_ADMIN,
+        self::STATUS_REJECTED,
+        self::STATUS_REOPENED,
+        self::STATUS_APPROVED,
+        self::STATUS_SUBMITTED_TO_OUSEC,
+        self::STATUS_RETURNED_TO_OUSEC,
+    ];
 
     // --- RELATIONSHIPS ---
 
@@ -157,6 +187,15 @@ class Objective extends Model
     public function office(): BelongsTo
     {
         return $this->belongsTo(Office::class);
+    }
+
+    /**
+     * Agency relationship (normalized FK).
+     * Replaces text-based dost_agency/agency_code columns.
+     */
+    public function agency(): BelongsTo
+    {
+        return $this->belongsTo(DOSTAgency::class, 'agency_id');
     }
 
     public function pillar(): BelongsTo
@@ -778,8 +817,9 @@ class Objective extends Model
                     $user->isPsto() => self::STATUS_SUBMITTED_TO_RO,
                     default => false,
                 },
+                // HO forwards back to OUSEC (follows the approve path, not straight to Admin)
                 self::STATUS_RETURNED_TO_HO => match (true) {
-                    $user->canActAsHeadOfOffice() => self::STATUS_SUBMITTED_TO_ADMIN,
+                    $user->canActAsHeadOfOffice() => self::STATUS_SUBMITTED_TO_OUSEC,
                     default => false,
                 },
                 self::STATUS_RETURNED_TO_RO => match (true) {
@@ -788,6 +828,10 @@ class Objective extends Model
                 },
                 self::STATUS_RETURNED_TO_OUSEC => match (true) {
                     $user->isOUSEC() => self::STATUS_SUBMITTED_TO_ADMIN,
+                    default => false,
+                },
+                self::STATUS_RETURNED_TO_ADMIN => match (true) {
+                    $user->isAdministrator() => self::STATUS_SUBMITTED_TO_SUPERADMIN,
                     default => false,
                 },
                 default => false,

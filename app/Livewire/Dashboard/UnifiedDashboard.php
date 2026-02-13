@@ -186,6 +186,14 @@ class UnifiedDashboard extends Component
     public string $adminConfirmTitle = '';
     public string $adminConfirmMessage = '';
 
+    // --- Approval Confirmation Modal State ---
+    public bool $showApprovalConfirmModal = false;
+    public ?int $approvalConfirmTargetId = null;
+    public string $approvalConfirmAction = ''; // 'approve', 'ousecApprove'
+    public string $approvalConfirmTitle = '';
+    public string $approvalConfirmMessage = '';
+    public string $approvalConfirmIndicator = '';
+
     // --- Delete Confirmation Modal State (for regular users) ---
     public bool $showDeleteConfirmModal = false;
     public ?int $deleteTargetId = null;
@@ -1067,27 +1075,14 @@ class UnifiedDashboard extends Component
                 return;
             }
 
-            // OUSEC approves and forwards to Admin
-            if ($objective->status === Objective::STATUS_SUBMITTED_TO_OUSEC) {
-                $objective->submitToAdmin();
-                $message = 'Approved and forwarded to Administrator.';
-            } elseif ($objective->status === Objective::STATUS_RETURNED_TO_OUSEC) {
-                // OUSEC resubmits to Admin
-                $objective->update(['status' => Objective::STATUS_SUBMITTED_TO_ADMIN]);
-                $message = 'Resubmitted to Administrator.';
-            } else {
-                $this->dispatch('toast', message: 'Cannot approve this indicator in its current state.', type: 'error');
-                return;
-            }
+            // Use the model's approve() method which handles OUSEC → Admin routing
+            $objective->approve($user);
 
-            // Record history
-            if (method_exists($objective, 'recordHistory')) {
-                $objective->recordHistory('approve', [
-                    'status' => Objective::STATUS_SUBMITTED_TO_OUSEC,
-                ], [
-                    'status' => $objective->status,
-                ]);
-            }
+            $freshStatus = $objective->fresh()->status;
+            $message = match($freshStatus) {
+                Objective::STATUS_SUBMITTED_TO_ADMIN => 'Approved and forwarded to Administrator.',
+                default => 'Action completed.',
+            };
 
             // Audit Log
             \App\Models\AuditLog::create([
@@ -1095,7 +1090,7 @@ class UnifiedDashboard extends Component
                 'action' => 'ousec_approve',
                 'entity_type' => 'Objective',
                 'entity_id' => (string)$objective->id,
-                'changes' => ['status' => $objective->status],
+                'changes' => ['status' => $freshStatus],
             ]);
 
             $this->dispatch('toast', message: $message, type: 'success');
@@ -1140,6 +1135,110 @@ class UnifiedDashboard extends Component
             \Log::error('ousecReject failed', ['id' => $id, 'error' => $e->getMessage()]);
             $this->dispatch('toast', message: 'Failed to reject indicator. Please try again.', type: 'error');
         }
+    }
+
+    // ==================== APPROVAL CONFIRMATION MODAL ====================
+
+    /**
+     * Open the approval confirmation modal for any approver role.
+     * Replaces native wire:confirm with a styled modal that shows
+     * indicator name and role-specific forward destination.
+     */
+    public function openApprovalConfirm(int $id, string $action = 'approve'): void
+    {
+        $user = Auth::user();
+        $objective = Objective::find($id);
+
+        if (!$objective) {
+            $this->dispatch('toast', message: 'Indicator not found.', type: 'error');
+            return;
+        }
+
+        // Permission check
+        $canApprove = $user->isRO() || $user->canActAsHeadOfOffice() || $user->isOUSEC()
+                      || $user->isAdministrator() || $user->isSA();
+        if (!$canApprove) {
+            $this->dispatch('toast', message: 'You do not have permission for this action.', type: 'error');
+            return;
+        }
+
+        $this->approvalConfirmTargetId = $id;
+        $this->approvalConfirmAction = $action;
+        $this->approvalConfirmIndicator = $objective->indicator ?? 'Indicator #' . $objective->id;
+
+        // Determine role-specific title & message
+        if ($action === 'ousecApprove') {
+            $this->approvalConfirmTitle = 'Approve & Forward to Administrator';
+            $this->approvalConfirmMessage = 'This indicator will be forwarded to the Administrator for the next level of review. Continue?';
+        } elseif ($user->isSA() || $user->isSuperAdmin()) {
+            $this->approvalConfirmTitle = 'Final Approval';
+            $this->approvalConfirmMessage = 'This will give final approval to the indicator. The indicator will be locked from further edits. Continue?';
+        } elseif ($user->isAdministrator()) {
+            $this->approvalConfirmTitle = 'Forward to SuperAdmin';
+            $this->approvalConfirmMessage = 'This indicator will be forwarded to the SuperAdmin for final approval. Continue?';
+        } elseif ($user->canActAsHeadOfOffice()) {
+            // Determine forward destination
+            $forwardDest = 'Administrator';
+            if ($objective->submitter && $objective->submitter->agency) {
+                if ($objective->submitter->agency->code !== 'DOST-CO') {
+                    $ousecType = \App\Constants\AgencyConstants::getOUSECTypeForCluster($objective->submitter->agency->cluster);
+                    $forwardDest = $ousecType ? str_replace('ousec_', 'OUSEC-', strtoupper($ousecType)) : 'OUSEC';
+                }
+            } elseif ($objective->submitter && ($objective->submitter->office || $objective->submitter->region_id)) {
+                $forwardDest = 'OUSEC-RO';
+            }
+            $this->approvalConfirmTitle = "Forward to {$forwardDest}";
+            $this->approvalConfirmMessage = "This indicator will be forwarded to {$forwardDest} for the next level of review. Continue?";
+        } elseif ($user->isRO()) {
+            $this->approvalConfirmTitle = 'Forward to Head of Office';
+            $this->approvalConfirmMessage = 'This indicator will be forwarded to the Head of Office for review. Continue?';
+        } else {
+            $this->approvalConfirmTitle = 'Approve Indicator';
+            $this->approvalConfirmMessage = 'Are you sure you want to approve this indicator?';
+        }
+
+        $this->showApprovalConfirmModal = true;
+    }
+
+    /**
+     * Close the approval confirmation modal and reset state.
+     */
+    public function closeApprovalConfirmModal(): void
+    {
+        $this->showApprovalConfirmModal = false;
+        $this->approvalConfirmTargetId = null;
+        $this->approvalConfirmAction = '';
+        $this->approvalConfirmTitle = '';
+        $this->approvalConfirmMessage = '';
+        $this->approvalConfirmIndicator = '';
+    }
+
+    /**
+     * Execute the confirmed approval action.
+     */
+    public function executeApproval(): void
+    {
+        if (!$this->approvalConfirmTargetId) {
+            $this->dispatch('toast', message: 'No target ID specified.', type: 'error');
+            return;
+        }
+
+        try {
+            if ($this->approvalConfirmAction === 'ousecApprove') {
+                $this->ousecApprove($this->approvalConfirmTargetId);
+            } else {
+                $this->approve($this->approvalConfirmTargetId);
+            }
+        } catch (\Throwable $e) {
+            \Log::error('executeApproval failed', [
+                'action' => $this->approvalConfirmAction,
+                'id' => $this->approvalConfirmTargetId,
+                'error' => $e->getMessage(),
+            ]);
+            $this->dispatch('toast', message: 'Approval failed: ' . $e->getMessage(), type: 'error');
+        }
+
+        $this->closeApprovalConfirmModal();
     }
 
     // ==================== ADMIN POWERS ====================

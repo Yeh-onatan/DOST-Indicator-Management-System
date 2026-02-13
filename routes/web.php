@@ -10,6 +10,8 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\PasswordSecurityController;
 use App\Http\Controllers\SuperAdminController;
 
+use App\Http\Middleware\EnsureOUSEC;
+
 // Livewire components
 use App\Livewire\Proponent\ObjectiveList;
 use App\Http\Middleware\EnsureAdministrator;
@@ -152,6 +154,7 @@ Route::middleware(['auth'])->group(function () {
             ->name('admin.approvals');
 
         Route::get('/ousec', \App\Livewire\Admin\OUSECDashboard::class)
+            ->middleware(EnsureOUSEC::class)
             ->name('admin.ousec');
 
         Route::get('/audit', \App\Livewire\Super\AuditLogs::class)

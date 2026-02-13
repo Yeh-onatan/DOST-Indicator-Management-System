@@ -447,7 +447,7 @@ class UserManager extends Component
         }
 
         return view('livewire.admin.user-manager', [
-            'users' => $query->paginate(15),
+            'users' => $query->paginate(50),
             'regions' => PhilippineRegion::where('is_active', true)->orderBy('order_index')->get(),
             'offices' => Office::where('is_active', true)->orderBy('name')->get(),
             'agencies' => DOSTAgency::where('is_active', true)->orderBy('acronym')->get(),

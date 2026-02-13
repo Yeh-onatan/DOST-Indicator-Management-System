@@ -77,35 +77,48 @@ class ObjectiveView extends Component
         $obj = $this->objective->fresh(['submitter']);
         if (! $obj) { abort(404); }
 
-        $before = $obj->only(['status']);
-        $obj->status = 'APPROVED';
-        $obj->review_notes = null;
-        $obj->corrections_required = null;
-        $obj->save();
+        try {
+            $user = Auth::user();
 
-        \App\Models\AuditLog::create([
-            'actor_user_id' => auth()->id(),
-            'action' => 'update',
-            'entity_type' => 'Objective',
-            'entity_id' => (string)$obj->id,
-            'changes' => ['diff' => [ 'status' => ['before' => $before['status'] ?? null, 'after' => 'APPROVED'] ]],
-        ]);
+            // Use the model's approve() method which handles ALL role-based routing:
+            //   SA → final approve
+            //   PSTO HO → submit to RO
+            //   HO (DOST-CO) → submit to Admin
+            //   HO (Agency) → submit to OUSEC
+            //   OUSEC → submit to Admin
+            //   Admin → submit to SuperAdmin
+            //   RO → submit to HO
+            $obj->approve($user);
 
-        if ($obj->submitter) {
-            $obj->submitter->notify(new \App\Notifications\ObjectiveStatusChanged(
-                status: 'APPROVED',
-                objective: $obj,
-                notes: null,
-                corrections: null,
-                actorId: auth()->id(),
-            ));
+            // Clear review notes on approval
+            $obj->update([
+                'review_notes' => null,
+                'corrections_required' => null,
+            ]);
+
+            // Generate appropriate message based on new status
+            $message = match($obj->fresh()->status) {
+                Objective::STATUS_SUBMITTED_TO_RO => 'Approved and forwarded to Regional Office.',
+                Objective::STATUS_SUBMITTED_TO_HO => 'Approved and forwarded to Head Office.',
+                Objective::STATUS_SUBMITTED_TO_OUSEC => 'Approved and forwarded to OUSEC.',
+                Objective::STATUS_SUBMITTED_TO_ADMIN => 'Approved and forwarded to Administrator.',
+                Objective::STATUS_SUBMITTED_TO_SUPERADMIN => 'Approved and forwarded to Super Admin.',
+                Objective::STATUS_APPROVED => 'Final approval granted. Indicator is now locked.',
+                default => 'Action completed.',
+            };
+
+            $this->objective = $obj->fresh(['submitter']);
+            session()->flash('success', $message);
+            $this->rejecting = false;
+            $this->reject_fields = '';
+            $this->reject_notes = '';
+        } catch (\Throwable $e) {
+            \Log::error('ObjectiveView::approve failed', [
+                'id' => $obj->id,
+                'error' => $e->getMessage(),
+            ]);
+            session()->flash('error', 'Failed to approve indicator. Please try again.');
         }
-
-        $this->objective = $obj;
-        session()->flash('success', 'Approved successfully.');
-        $this->rejecting = false;
-        $this->reject_fields = '';
-        $this->reject_notes = '';
     }
 
     public function startReject(): void
@@ -148,39 +161,36 @@ class ObjectiveView extends Component
             return;
         }
 
-        $before = $obj->only(['status','review_notes','corrections_required']);
-        $obj->status = 'REJECTED';
-        $obj->review_notes = $this->reject_notes ?: null;
-        $obj->corrections_required = $fields ?: null;
-        $obj->save();
+        try {
+            $user = Auth::user();
 
-        \App\Models\AuditLog::create([
-            'actor_user_id' => auth()->id(),
-            'action' => 'update',
-            'entity_type' => 'Objective',
-            'entity_id' => (string)$obj->id,
-            'changes' => ['diff' => [
-                'status' => ['before' => $before['status'] ?? null, 'after' => 'REJECTED'],
-                'review_notes' => ['before' => $before['review_notes'] ?? null, 'after' => $obj->review_notes],
-                'corrections_required' => ['before' => $before['corrections_required'] ?? null, 'after' => $obj->corrections_required],
-            ]],
-        ]);
+            // Store corrections required
+            $obj->update([
+                'review_notes' => $this->reject_notes ?: null,
+                'corrections_required' => $fields ?: null,
+            ]);
 
-        if ($obj->submitter) {
-            $obj->submitter->notify(new \App\Notifications\ObjectiveStatusChanged(
-                status: 'REJECTED',
-                objective: $obj,
-                notes: $this->reject_notes ?: null,
-                corrections: $fields ?: null,
-                actorId: auth()->id(),
-            ));
+            // Use the model's reject() method which handles ALL role-based return routing:
+            //   SA/Admin + DOST-CO submitter → returned_to_ho
+            //   SA/Admin + Agency submitter → returned_to_ousec
+            //   OUSEC → returned_to_ho
+            //   HO + Agency submitter → returned_to_agency
+            //   HO + PSTO submitter → returned_to_psto
+            //   RO → returned_to_psto
+            $obj->reject($user, $this->reject_notes);
+
+            $this->objective = $obj->fresh(['submitter']);
+            session()->flash('success', 'Rejected and sent back with required fixes.');
+            $this->rejecting = false;
+            $this->reject_fields = '';
+            $this->reject_notes = '';
+        } catch (\Throwable $e) {
+            \Log::error('ObjectiveView::reject failed', [
+                'id' => $obj->id,
+                'error' => $e->getMessage(),
+            ]);
+            session()->flash('error', 'Failed to reject indicator. Please try again.');
         }
-
-        $this->objective = $obj;
-        session()->flash('success', 'Rejected and sent back with required fixes.');
-        $this->rejecting = false;
-        $this->reject_fields = '';
-        $this->reject_notes = '';
     }
 
     // --- Proof Management ---
