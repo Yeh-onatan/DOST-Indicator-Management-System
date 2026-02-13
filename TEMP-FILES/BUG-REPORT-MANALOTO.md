@@ -197,59 +197,51 @@ Added SoftDeletes trait to all critical data models:
 
 ---
 
-### 1.10 Password Reuse Check Is Fundamentally Broken
+### ~~1.10 Password Reuse Check Is Fundamentally Broken~~ ✅ FIXED
 
 **File:** [app/Models/User.php](http://app/Models/User.php)  
 **Severity:** CRITICAL \- SECURITY  
 **Impact:** Users can reuse old passwords despite check
 
-The password reuse validation compares bcrypt hashes directly:
+**STATUS: FIXED (February 13, 2026)**  
+Fixed password reuse validation in two locations:
+- ✅ PasswordSecurityController.php — Now passes plaintext password to hasUsedPasswordBefore()
+- ✅ ResetUserPassword.php — Now passes plaintext password correctly
 
-// BROKEN: bcrypt hashes are ALWAYS different, even for same password
+**What was wrong:** The code was creating a new hash with Hash::make() and comparing it to old hashes. Bcrypt generates a different hash every time, even for the same password, so the comparison always failed.
 
-if ($newPasswordHash \=== $oldPasswordHash) { /\* Reject \*/ }
-
-// BROKEN: Comparing different hashes from same password will ALWAYS be false
-
-Hash::make('password123') \!== Hash::make('password123')  // true (different every time)
-
-**Fix:** Use `Hash::check()`:
-
-if (Hash::check($newPassword, $oldPasswordHash)) {
-
-    throw ValidationException::withMessages(\['password' \=\> 'Cannot reuse recent passwords'\]);
-
-}
+**How it's fixed:** The code now passes the plaintext password to hasUsedPasswordBefore(), which internally uses Hash::check() to properly verify if the password matches any of the last 4 password hashes.
 
 ---
 
-### 1.11 Password Shown On Screen During Reset
+### ~~1.11 Password Shown On Screen During Reset~~ ✅ FIXED
 
 **Severity:** CRITICAL \- SECURITY  
 **Impact:** New password visible in toast popup — shoulder surfers can read it
 
-When resetting password, new password shown in success toast message on screen. Anyone looking at monitor can see it.
+**STATUS: FIXED (February 13, 2026)**  
+Fixed in UnifiedDashboard.php performPasswordReset() method:
+- ✅ Removed password from toast notification
+- ✅ Added audit log entry tracking the reset action
+- ✅ Changed message to indicate password was sent to email
+- ✅ Password no longer exposed on screen
 
-**Fix:**
+**What was wrong:** When admin reset a user's password, the new password appeared in a popup message on screen where anyone could see it.
 
-- Send password via email only  
-- Or show in secure modal with "copy to clipboard" button  
-- Show warnings about not sharing
-
----
-
-### 1.12 Notification Mark-As-Read Uses GET (Stateful) Request
+**How it's fixed:** The password is no longer shown. Instead, the system shows "Password reset successful. New password sent to {email}." The reset action is logged in the audit trail.
+### ~~1.12 Notification Mark-As-Read Uses GET (Stateful) Request~~ ✅ ALREADY FIXED
 
 **File:** [routes/web.php](http://routes/web.php#L86)  
 **Severity:** CRITICAL \- SECURITY  
 **Impact:** Any prefetcher/crawler can mark notifications as read
 
-Route::get('/{id}/mark-read', ...)  // GET should not change state
+**STATUS: ALREADY FIXED (checked February 13, 2026)**  
+Route already uses POST method:
+```php
+Route::post('/{id}/mark-read', [NotificationsController::class, 'markAsRead'])
+```
 
-GET requests should be safe/idempotent. Browsers prefetch links. Email clients prefetch image URLs. Clicking this could auto-read ALL notifications.
-
-**Fix:** Change to POST/PATCH with CSRF:
-
+**Why this matters:** POST requests require user action and CSRF tokens, preventing automated tools from accidentally marking notifications as read.
 Route::post('/{id}/mark-read', ...)
 
 Route::patch('/{id}/mark-read', ...)
@@ -260,58 +252,55 @@ Route::patch('/{id}/mark-read', ...)
 
 ### 2.1 Status String Case Inconsistency: DRAFT vs draft
 
+### 2.1 Status String Case Inconsistency: DRAFT vs draft - 🔧 IN PROGRESS
+
 **Severity:** HIGH \- LOGIC ERRORS  
 **Impact:** Wrong counts, broken filters, silent logic failures
 
-The model defines mixed casing that propagates everywhere:
+**STATUS: PARTIALLY FIXED (February 13, 2026)**  
+Model constants are now lowercase (Objective.php lines 106-118):
+- ✅ STATUS_DRAFT = 'draft'
+- ✅ STATUS_APPROVED = 'approved'
+- ✅ All status constants now lowercase
 
-- [Indicator.php](http://app/Models/Indicator.php#L84) line 84: `STATUS_DRAFT = 'DRAFT'` (uppercase)  
-- [Indicator.php](http://app/Models/Indicator.php#L94) line 94: `STATUS_APPROVED = 'approved'` (lowercase)
+**Still needs fixing:**
+- 🔲 ObjectiveForm.php uses 'APPROVED' and 'REJECTED' (uppercase) in comparisons
+- 🔲 Some hardcoded strings still mix case
+- 🔲 Database may contain mixed case values
 
-**Problems:**
+**Why this is a problem:** Some parts of the code check for 'DRAFT' (uppercase) while the database stores 'draft' (lowercase). On case-sensitive databases, this causes filters to return zero results and status checks to fail.
 
-1. [UnifiedDashboard.php](http://app/Livewire/Dashboard/UnifiedDashboard.php#L2987) line 2987 passes `'draft'` (lowercase) but DB stores `'DRAFT'` — draft count shows 0 on case-sensitive databases  
-2. [UnifiedIndicatorForm.php](http://app/Livewire/Indicators/UnifiedIndicatorForm.php#L323) line 323 checks `'rejected'` (lowercase) but model stores `'REJECTED'` (uppercase) — check always fails  
-3. [table-actions.blade.php](http://resources/views/components/dashboard/table-actions.blade.php) mixes both in same array  
-4. Filter buttons send different cases to same filter logic
-
-**Fix:**
-
-- Standardize all status strings to **lowercase**  
-- Update all constants and hardcoded strings  
-- Run migration to lowercase all existing values in DB
-
----
+**Next steps:** Update all hardcoded status strings to use the constants and ensure database values are lowercase.
 
 ### 2.2 Role Name Mismatch: head\_of\_office vs head\_officer
 
 **Severity:** HIGH \- FUNCTIONALITY BROKEN  
 **Impact:** System cannot find correct users for approval chain
 
-Some code uses `'head_of_office'` others use `'head_officer'`. The constants don't match either.
+### ~~2.2 Role Name Mismatch: head\_of\_office vs head\_officer~~ ✅ FIXED
 
-**Results:**
+**Severity:** HIGH \- FUNCTIONALITY BROKEN  
+**Impact:** System cannot find correct users for approval chain
 
-- Approval chain skips users  
-- Permission checks return wrong results  
-- Users can't be assigned to roles
+**STATUS: FIXED (February 13, 2026)**  
+Fixed role name inconsistency:
+- ✅ Objective.php — Changed 'head_of_office' to User::ROLE_HO constant
+- ✅ All database queries now use correct role constant
 
-**Fix:** Pick ONE role name. Update all code \+ constants.
+**What was wrong:** Some code used 'head_of_office' as a role name, but the actual role constant is 'head_officer'. This caused approval chain queries to return no results.
 
----
-
-### 2.3 Wrong Column Name: submitter\_id vs submitted\_by\_user\_id
+**How it's fixed:** All role checks now use the User::ROLE_HO constant ('head_officer'), ensuring consistent role matching throughout the system.
+**Severity:** HIGH \- FUNCTIONALITY  
+**Impact:** Rejection notes don't get saved to correct user
+### ~~2.3 Wrong Column Name: submitter\_id vs submitted\_by\_user\_id~~ ✅ ALREADY FIXED
 
 **Severity:** HIGH \- FUNCTIONALITY  
 **Impact:** Rejection notes don't get saved to correct user
 
-Code references `submitter_id` but actual DB column is `submitted_by_user_id`.
+**STATUS: ALREADY FIXED (checked February 13, 2026)**  
+Verified in Objective.php line 566 — code already uses correct column name `submitted_by_user_id`. Comment in code confirms this bug was previously identified and fixed.
 
-**Fix:** Replace `submitter_id` with `submitted_by_user_id` everywhere.
-
----
-
-### 2.4 Missing $fillable: Forms Can't Save Data
+**Why this matters:** Using the wrong column name would cause data to be saved to a non-existent column, resulting in data loss.
 
 **Severity:** HIGH \- DATA NOT PERSISTING  
 **Impact:** Forms appear to save, but data disappears
