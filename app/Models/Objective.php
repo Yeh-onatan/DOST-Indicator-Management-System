@@ -638,7 +638,7 @@ class Objective extends Model
 
         if ($submitter && $submitter->region_id) {
             $ho = User::where('region_id', $submitter->region_id)
-                ->where('role', 'head_of_office')
+                ->where('role', User::ROLE_HO)
                 ->first();
             if ($ho) {
                 return $ho->id;

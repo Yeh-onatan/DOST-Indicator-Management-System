@@ -55,11 +55,9 @@ class PasswordSecurityController extends Controller
 
         $user = Auth::user();
 
-        // Hash the new password for comparison with history
-        $newPasswordHash = Hash::make($request->input('password'));
-
         // PCI DSS: Check if password was used before (last 4 passwords)
-        if ($user->hasUsedPasswordBefore($newPasswordHash)) {
+        // Pass the plaintext password - hasUsedPasswordBefore() uses Hash::check() internally
+        if ($user->hasUsedPasswordBefore($request->input('password'))) {
             return back()
                 ->withInput()
                 ->withErrors([

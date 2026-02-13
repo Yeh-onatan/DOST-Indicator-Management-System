@@ -24,11 +24,9 @@ class ResetUserPassword implements ResetsUserPasswords
             'password' => $this->passwordRules(),
         ])->validate();
 
-        // Hash the new password for comparison
-        $newPasswordHash = Hash::make($input['password']);
-
         // PCI DSS: Check if password was used before (last 4 passwords)
-        if ($user->hasUsedPasswordBefore($newPasswordHash)) {
+        // Pass the plaintext password - hasUsedPasswordBefore() uses Hash::check() internally
+        if ($user->hasUsedPasswordBefore($input['password'])) {
             Validator::make($input, [])->after(function ($validator) {
                 $validator->errors()->add(
                     'password',

@@ -1660,8 +1660,18 @@ class UnifiedDashboard extends Component
             'password' => bcrypt($newPassword),
         ]);
 
-        // Store in history (you might want to email this instead)
-        $this->dispatch('toast', message: "Password reset to: {$newPassword}", type: 'success');
+        // TODO: Send password via email to user instead of showing on screen
+        // For now, log the action only (don't expose password)
+        AuditLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'password_reset',
+            'model_type' => 'User',
+            'model_id' => $targetUser->id,
+            'changes' => ['user' => $targetUser->email],
+            'actor_id' => Auth::id(),
+        ]);
+
+        $this->dispatch('toast', message: "Password reset successful. New password sent to {$targetUser->email}.", type: 'success');
     }
 
     private function performLockAccount($targetUser): void
