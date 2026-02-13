@@ -154,8 +154,6 @@ class User extends Authenticatable
     /**
      * Check if user can act as Head of Office (role OR assignment-based)
      * This is the main method to use for all HO permission checks
-     *
-     * Note: Office relationship is eager loaded by EagerLoadUserRelationships middleware
      */
     public function canActAsHeadOfOffice(): bool
     {
@@ -165,8 +163,14 @@ class User extends Authenticatable
         }
 
         // Check 2: Is assigned as head of any office
-        if ($this->office_id && $this->office && $this->office->head_user_id === $this->id) {
-            return true;
+        // Only check if office_id is set to avoid querying
+        if ($this->office_id) {
+            // If office relationship is already loaded, use it
+            if ($this->relationLoaded('office') && $this->office) {
+                return $this->office->head_user_id === $this->id;
+            }
+            // If not loaded, query the relationship (will only load if needed)
+            return $this->office()->where('head_user_id', $this->id)->exists();
         }
 
         return false;
@@ -174,16 +178,16 @@ class User extends Authenticatable
 
     /**
      * Get the office this user is head of (if any)
-     *
-     * Note: Office relationship is eager loaded by EagerLoadUserRelationships middleware
      */
     public function getHeadOfOffice(): ?Office
     {
-        if ($this->office && $this->office->head_user_id === $this->id) {
+        // If office relationship is already loaded, use it
+        if ($this->relationLoaded('office') && $this->office && $this->office->head_user_id === $this->id) {
             return $this->office;
         }
 
-        return null;
+        // If not loaded, query for it
+        return $this->office()->where('head_user_id', $this->id)->first();
     }
 
     public function isRO(): bool

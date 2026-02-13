@@ -31,6 +31,12 @@ class CreateAccount extends Component
 
     public function save(): void
     {
+        // SECURITY FIX: Verify user is super admin before creating accounts
+        if (!auth()->user() || !auth()->user()->isSuperAdmin()) {
+            session()->flash('error', 'Unauthorized: Only super administrators can create accounts.');
+            return;
+        }
+
         $this->validate();
         if (!$this->generated_password) {
             $this->generatePassword();

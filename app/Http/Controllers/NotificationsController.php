@@ -38,6 +38,9 @@ class NotificationsController extends Controller
 
     /**
      * Mark a notification as read.
+     *
+     * SECURITY FIX: Validate action_url is internal before redirecting
+     * Prevents open redirect vulnerability where attacker can redirect to phishing site
      */
     public function markAsRead(string $id)
     {
@@ -50,18 +53,38 @@ class NotificationsController extends Controller
         }
 
         // Redirect to action URL if available
-        if ($notification->action_url) {
+        // SECURITY: Only redirect to internal URLs (starting with /)
+        if ($notification->action_url && $this->isInternalUrl($notification->action_url)) {
             return redirect($notification->action_url);
         }
 
         // Fallback: check if there's an objective_id in data
         $data = $notification->data ?? [];
         if (isset($data['objective_id'])) {
-            return redirect('/dashboard?search=' . $data['objective_id']);
+            return redirect('/dashboard?search=' . urlencode($data['objective_id']));
         }
 
         // Default: redirect to notifications index
         return redirect()->route('notifications.index');
+    }
+
+    /**
+     * Validate that URL is internal (not external redirect)
+     */
+    protected function isInternalUrl(string $url): bool
+    {
+        // Allow relative URLs starting with /
+        if (str_starts_with($url, '/')) {
+            return true;
+        }
+
+        // Allow URLs that start with the app URL
+        if (str_starts_with($url, config('app.url'))) {
+            return true;
+        }
+
+        // Reject everything else (external URLs, protocol-relative URLs, etc)
+        return false;
     }
 
     /**

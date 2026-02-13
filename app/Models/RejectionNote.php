@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RejectionNote extends Model
 {
+    use SoftDeletes;
     protected $fillable = [
         'objective_id',
         'rejected_by_user_id',
