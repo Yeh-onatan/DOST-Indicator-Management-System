@@ -24,8 +24,11 @@
                 @if ($errors->any())
                     <div class="rounded-lg p-3 text-sm bg-red-50 text-red-700 border border-red-200">
                         <ul class="list-disc ms-4">
-                            @foreach ($errors->all() as $error)
-                                <li>{{ $error }}</li>
+                            @foreach ($errors->getMessages() as $field => $messages)
+                                @foreach ($messages as $message)
+                                    <li>{{ $message }}</li>
+                                    @break
+                                @endforeach
                             @endforeach
                         </ul>
                     </div>

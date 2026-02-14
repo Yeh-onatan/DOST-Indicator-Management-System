@@ -27,7 +27,7 @@
 
         {{-- ================= PSTO ACTIONS ================= --}}
         @if($user->isPSTO())
-            @if($objective->status === \App\Models\Indicator::STATUS_APPROVED)
+            @if($objective->status === \App\Models\Objective::STATUS_APPROVED)
                 {{-- Update Progress (Refresh Icon) --}}
                 <button wire:click="openUpdateProgress({{ $objective->id }})"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
@@ -36,7 +36,7 @@
                 </button>
             @endif
 
-            @if(in_array($objective->status, ['DRAFT', 'rejected', 'returned_to_psto']))
+            @if(in_array($objective->status, [\App\Models\Objective::STATUS_DRAFT, 'rejected', 'returned_to_psto']))
                 {{-- Edit (Pencil Icon) --}}
                 <button wire:click="openEdit({{ $objective->id }})"
                     class="p-1.5 rounded-full text-amber-600 hover:bg-amber-100 hover:text-amber-800 transition-all"
@@ -57,7 +57,24 @@
 
         {{-- ================= RO ACTIONS ================= --}}
         @if($user->isRO())
-            @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_RO || $objective->status === \App\Models\Indicator::STATUS_RETURNED_TO_RO)
+            {{-- Draft: RO can edit and submit to HO --}}
+            @if(in_array($objective->status, [\App\Models\Objective::STATUS_DRAFT, 'returned_to_ro']))
+                <button wire:click="openEdit({{ $objective->id }})"
+                    class="p-1.5 rounded-full text-amber-600 hover:bg-amber-100 hover:text-amber-800 transition-all"
+                    title="Edit">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                </button>
+
+                <button wire:click="submitToHO({{ $objective->id }})"
+                    wire:confirm="Submit to Head of Office?"
+                    class="p-1.5 rounded-full text-[#00AEEF] hover:bg-blue-50 hover:text-blue-600 transition-all"
+                    title="Submit to H.O.">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                </button>
+            @endif
+
+            {{-- Submitted to RO: RO can review, forward, or return --}}
+            @if($objective->status === \App\Models\Objective::STATUS_SUBMITTED_TO_RO)
                 <button wire:click="openEdit({{ $objective->id }})"
                     class="p-1.5 rounded-full text-amber-600 hover:bg-amber-100 hover:text-amber-800 transition-all"
                     title="Edit">
@@ -82,7 +99,7 @@
         {{-- ================= AGENCY ACTIONS ================= --}}
         @if($user->isAgency())
             {{-- Update Progress (when approved) --}}
-            @if($objective->status === \App\Models\Indicator::STATUS_APPROVED)
+            @if($objective->status === \App\Models\Objective::STATUS_APPROVED)
                 <button wire:click="openUpdateProgress({{ $objective->id }})"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
                     title="Update Progress">
@@ -91,7 +108,7 @@
             @endif
 
             {{-- Edit, Submit (when draft/rejected/returned) --}}
-            @if(in_array($objective->status, ['DRAFT', 'rejected', 'returned_to_agency']))
+            @if(in_array($objective->status, [\App\Models\Objective::STATUS_DRAFT, 'rejected', 'returned_to_agency']))
                 {{-- Edit (Pencil Icon) --}}
                 <button wire:click="openEdit({{ $objective->id }})"
                     class="p-1.5 rounded-full text-amber-600 hover:bg-amber-100 hover:text-amber-800 transition-all"
@@ -149,7 +166,7 @@
 
         {{-- ================= HO/ACTION ACTIONS ================= --}}
         @if($user->canActAsHeadOfOffice())
-            @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_HO)
+            @if($objective->status === \App\Models\Objective::STATUS_SUBMITTED_TO_HO)
                 {{-- Approve (Forward to OUSEC or Admin) --}}
                 @php
                     // Determine the forward destination for dynamic title
@@ -184,7 +201,7 @@
 
         {{-- ================= ADMIN ACTIONS ================= --}}
         @if($user->isAdministrator())
-            @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_ADMIN)
+            @if($objective->status === \App\Models\Objective::STATUS_SUBMITTED_TO_ADMIN)
                 {{-- Approve (Forward to SuperAdmin) --}}
                 <button wire:click="openApprovalConfirm({{ $objective->id }}, 'approve')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
@@ -203,7 +220,7 @@
 
         {{-- ================= SUPERADMIN ACTIONS ================= --}}
         @if($user->isSuperAdmin())
-            @if($objective->status === \App\Models\Indicator::STATUS_SUBMITTED_TO_SUPERADMIN)
+            @if($objective->status === \App\Models\Objective::STATUS_SUBMITTED_TO_SUPERADMIN)
                 {{-- Final Approve (Check) --}}
                 <button wire:click="openApprovalConfirm({{ $objective->id }}, 'approve')"
                     class="p-1.5 rounded-full text-green-600 hover:bg-green-100 hover:text-green-800 transition-all"
@@ -233,7 +250,7 @@
             </button>
 
             {{-- Force Delete (Trash with Warning) --}}
-            @if($objective->status !== \App\Models\Indicator::STATUS_APPROVED)
+            @if($objective->status !== \App\Models\Objective::STATUS_APPROVED)
                 <button wire:click="openAdminConfirm({{ $objective->id }}, 'adminDelete')"
                     class="p-1.5 rounded-full text-orange-600 hover:bg-orange-100 hover:text-orange-800 transition-all"
                     title="Force Delete (Admin)">
@@ -257,7 +274,7 @@
             <div class="w-px h-5 bg-red-900 mx-1"></div>
 
             {{-- Force Delete Approved (Double Danger) --}}
-            @if($objective->status === \App\Models\Indicator::STATUS_APPROVED)
+            @if($objective->status === \App\Models\Objective::STATUS_APPROVED)
                 <button wire:click="forceDeleteApproved({{ $objective->id }})"
                     wire:confirm="⚠️ DANGER: This will PERMANENTLY delete an APPROVED indicator. This action CANNOT be undone. Continue?"
                     class="p-1.5 rounded-full text-red-700 hover:bg-red-100 hover:text-red-900 transition-all"

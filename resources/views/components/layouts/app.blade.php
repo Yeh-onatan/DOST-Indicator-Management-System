@@ -138,18 +138,6 @@
                             <span>Dashboard</span>
                         </a>
 
-                        {{-- OUSEC Dashboard --}}
-                        @if (Auth::user()->isOUSEC())
-                            <a href="{{ route('admin.ousec') }}"
-                               class="flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all duration-200
-                                      {{ request()->routeIs('admin.ousec')
-                                          ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
-                                          : 'text-slate-600 hover:bg-slate-50 hover:text-blue-600' }}">
-                                <x-icon name="dashboard" class="w-5 h-5" />
-                                <span>OUSEC Panel</span>
-                            </a>
-                        @endif
-
                         {{-- Admin Panel --}}
                         @if (Auth::user()->role === \App\Models\User::ROLE_ADMIN || Auth::user()->role === \App\Models\User::ROLE_SUPER_ADMIN)
                             <div class="pt-4 pb-2">

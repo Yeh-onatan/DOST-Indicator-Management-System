@@ -556,8 +556,6 @@ class Objective extends Model
                 if ($approver->canActAsHeadOfOffice()) {
                     if ($approver->office && $approver->office->type === 'PSTO' && $approver->office->head_user_id === $approver->id) {
                         $this->submitToRegionalHead();
-                    } elseif ($this->submitter && $this->submitter->agency && $this->submitter->agency->code === AgencyConstants::DOST_CO) {
-                        $this->submitToAdmin();
                     } elseif ($this->submitter && $this->submitter->isAgency()) {
                         $this->submitToOUSEC();
                     } else {
@@ -865,6 +863,22 @@ class Objective extends Model
 
     // --- SCOPES ---
 
+    /**
+     * Scope: Authorized indicator visibility.
+     *
+     * This is the CANONICAL visibility method. All dashboard queries MUST use this scope.
+     *
+     * Visibility rules:
+     * - SA / Admin / Execom: see everything
+     * - OUSEC-RO: regional-flow indicators at OUSEC level or above
+     * - OUSEC-STS/RD: agency-flow indicators from their assigned clusters at OUSEC level or above
+     * - Agency users (staff or HO): own indicators + all indicators from same agency
+     * - PSTO staff (non-head): own indicators only
+     * - PSTO Head: own indicators + all indicators from their PSTO office
+     * - RO / RO Head: own indicators + all indicators from their RO office + child PSTOs
+     *   (uses user.office_id, NOT head_user_id lookup, so new accounts work immediately)
+     * - Unknown/unmatched: own indicators only (safe fallback)
+     */
     public function scopeAuthorized(Builder $query)
     {
         $user = auth()->user();
@@ -873,123 +887,77 @@ class Objective extends Model
             return $query->whereRaw('1 = 0');
         }
 
+        // --- Global access roles ---
         if ($user->isSA() || $user->isAdministrator() || $user->isExecom()) {
             return $query;
         }
 
+        // --- OUSEC roles (see ALL indicators in their scope, regardless of status) ---
         if ($user->isOUSEC()) {
             return $query->where(function ($q) use ($user) {
                 if ($user->isOUSEROR()) {
-                    $q->where(function ($sub) {
-                        $sub->whereNotNull('office_id')
-                            ->whereNotNull('region_id');
-                    })->whereIn('status', [
-                        self::STATUS_SUBMITTED_TO_OUSEC,
-                        self::STATUS_SUBMITTED_TO_ADMIN,
-                        self::STATUS_SUBMITTED_TO_SUPERADMIN,
-                        self::STATUS_APPROVED,
-                    ]);
+                    // OUSEC-RO: all regional-flow indicators (any status)
+                    $q->whereNotNull('office_id');
                 } else {
+                    // OUSEC-STS / OUSEC-RD: all agency-flow indicators from assigned clusters (any status)
                     $allowedClusters = $user->getOUSECClusters();
-                    $q->whereHas('submitter.agency', function ($agencyQuery) use ($allowedClusters) {
-                        $agencyQuery->whereIn('cluster', $allowedClusters);
-                    })->whereIn('status', [
-                        self::STATUS_SUBMITTED_TO_OUSEC,
-                        self::STATUS_SUBMITTED_TO_ADMIN,
-                        self::STATUS_SUBMITTED_TO_SUPERADMIN,
-                        self::STATUS_APPROVED,
-                    ]);
+                    if (!empty($allowedClusters)) {
+                        $q->where(function ($sub) use ($allowedClusters) {
+                            $sub->whereHas('submitter.agency', function ($aq) use ($allowedClusters) {
+                                $aq->whereIn('cluster', $allowedClusters);
+                            })
+                            ->orWhereHas('agency', function ($aq) use ($allowedClusters) {
+                                $aq->whereIn('cluster', $allowedClusters);
+                            });
+                        });
+                    } else {
+                        // No clusters assigned — see nothing
+                        $q->whereRaw('1 = 0');
+                    }
                 }
             });
         }
 
+        // --- Agency-flow users (user has agency_id) ---
+        if ($user->agency_id) {
+            return $query->where(function ($q) use ($user) {
+                // Own indicators (any status)
+                $q->where('submitted_by_user_id', $user->id);
+                // All indicators from the same agency (via direct column or submitter relationship)
+                $q->orWhere('agency_id', $user->agency_id);
+                $q->orWhereHas('submitter', function ($s) use ($user) {
+                    $s->where('agency_id', $user->agency_id);
+                });
+            });
+        }
+
+        // --- Regional-flow users (office-based) ---
         return $query->where(function ($q) use ($user) {
-            if ($user->isAgency()) {
-                $q->orWhere(function ($sub) use ($user) {
-                    $sub->whereHas('submitter', function ($s) use ($user) {
-                        $s->where('agency_id', $user->agency_id);
-                    })
-                    ->orWhere('submitted_by_user_id', $user->id);
-                });
-            } elseif ($user->isPSTO() && !$user->canActAsHeadOfOffice()) {
-                $q->orWhere(function ($sub) use ($user) {
-                    $sub->where('office_id', $user->office_id)
-                        ->orWhere('submitted_by_user_id', $user->id);
-                });
-            } elseif ($user->isRO()) {
-                $q->orWhere('submitted_by_user_id', $user->id);
+            // ALWAYS include own indicators as baseline (safe fallback)
+            $q->where('submitted_by_user_id', $user->id);
 
-                $roOffices = Office::where('head_user_id', $user->id)
-                    ->where('type', 'RO')
-                    ->pluck('id');
+            $office = $user->office;
 
-                if ($roOffices->isNotEmpty()) {
-                    $childPstoOfficeIds = Office::whereIn('parent_office_id', $roOffices)
-                        ->pluck('id');
-                    $allOfficeIds = $roOffices->concat($childPstoOfficeIds)->unique();
-
-                    $q->orWhere(function ($sub) use ($allOfficeIds) {
-                        $sub->whereIn('office_id', $allOfficeIds)
-                            ->whereIn('status', [
-                                self::STATUS_SUBMITTED_TO_RO,
-                                self::STATUS_RETURNED_TO_RO,
-                                self::STATUS_SUBMITTED_TO_HO,
-                                self::STATUS_SUBMITTED_TO_ADMIN,
-                                self::STATUS_APPROVED,
-                            ]);
-                    });
-                }
-            } elseif ($user->canActAsHeadOfOffice()) {
-                if ($user->agency_id) {
-                    $q->orWhere(function ($sub) use ($user) {
-                        $sub->whereHas('submitter', function ($s) use ($user) {
-                            $s->where('agency_id', $user->agency_id);
-                        })
-                        ->whereIn('status', [
-                            self::STATUS_SUBMITTED_TO_HO,
-                            self::STATUS_RETURNED_TO_AGENCY,
-                            self::STATUS_SUBMITTED_TO_ADMIN,
-                            self::STATUS_APPROVED,
-                        ]);
-                    });
-                } elseif ($user->region_id) {
-                    $q->orWhere(function ($sub) use ($user) {
-                        $sub->where('region_id', $user->region_id)
-                            ->whereIn('status', [
-                                self::STATUS_SUBMITTED_TO_RO,
-                                self::STATUS_RETURNED_TO_RO,
-                                self::STATUS_SUBMITTED_TO_HO,
-                                self::STATUS_RETURNED_TO_AGENCY,
-                                self::STATUS_SUBMITTED_TO_ADMIN,
-                                self::STATUS_APPROVED,
-                            ]);
-                    });
-                } elseif ($user->office_id) {
-                    if ($user->office && $user->office->type === 'RO' && $user->office->head_user_id === $user->id) {
-                        $q->orWhere(function ($sub) use ($user) {
-                            $sub->where('region_id', $user->office->region_id)
-                                ->whereIn('status', [
-                                    self::STATUS_SUBMITTED_TO_RO,
-                                    self::STATUS_RETURNED_TO_RO,
-                                    self::STATUS_SUBMITTED_TO_HO,
-                                    self::STATUS_SUBMITTED_TO_ADMIN,
-                                    self::STATUS_APPROVED,
-                                ]);
-                        });
-                    } elseif ($user->office && $user->office->type === 'PSTO' && $user->office->head_user_id === $user->id) {
-                        $q->orWhere(function ($sub) use ($user) {
-                            $sub->where('office_id', $user->office_id)
-                                ->whereIn('status', [
-                                    self::STATUS_SUBMITTED_TO_HO,
-                                    self::STATUS_SUBMITTED_TO_ADMIN,
-                                    self::STATUS_APPROVED,
-                                    self::STATUS_RETURNED_TO_RO,
-                                    self::STATUS_RETURNED_TO_AGENCY,
-                                ]);
-                        });
-                    }
-                }
+            if (!$user->office_id || !$office) {
+                // No office assigned — only own indicators (already covered above)
+                return;
             }
+
+            if ($office->type === 'PSTO') {
+                // ALL PSTO users (staff + head) see all indicators from their office
+                // This ensures SA-imported indicators assigned to this office are visible
+                $q->orWhere('office_id', $user->office_id);
+
+            } elseif ($office->type === 'RO') {
+                // RO user (any role — ro, head_officer, etc.): see their RO + child PSTO indicators
+                $childPstoIds = Office::where('parent_office_id', $user->office_id)
+                    ->pluck('id')
+                    ->all();
+                $allOfficeIds = array_merge([$user->office_id], $childPstoIds);
+
+                $q->orWhereIn('office_id', $allOfficeIds);
+            }
+            // CO/HO/other office types: only own indicators (already covered above)
         });
     }
 

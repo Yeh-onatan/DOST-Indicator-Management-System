@@ -1,7 +1,227 @@
 # Activity Log - DOST Indicator Management System
 
-**Last Updated:** February 13, 2026  
+**Last Updated:** February 15, 2026  
 **Purpose:** Track all fixes and changes in simple, easy-to-understand language
+
+---
+
+## February 15, 2026 - Session 5: Visibility Fixes & Regional Workflow (PARTIAL) ⚠️
+
+### Changes Made (COMPLETED) ✅
+
+#### 1. Rewrote scopeAuthorized() in Objective.php (CANONICAL METHOD) ✅
+- **Problem:** Two separate visibility methods with divergent logic — causing cross-region indicator leaks
+  - `scopeAuthorized()` in Objective.php (used only for openView auth checks)
+  - `applyScopes()` in UnifiedDashboard.php (used for main dashboard query) — was MISSING PSTO/Agency/HO branches
+- **Fix:** 
+  - Rewrote `scopeAuthorized()` to be THE canonical visibility method
+  - Agency flow users: see own + all indicators where `agency_id` matches (direct column OR submitter's agency)
+  - PSTO users: see ALL indicators from their office (not just own) — allows SA-imported drafts to be visible
+  - RO users: see own + all indicators from their RO office + child PSTO offices — uses `$user->office_id` directly (works for new accounts immediately)
+  - OUSEC: see ALL indicators in their scope (removed status whitelist — now sees drafts too)
+- **Impact:** Regional-flow visibility now consistent, but see "Remaining Bugs" below
+
+#### 2. Unified applyScopes() in UnifiedDashboard.php ✅
+- **Problem:** Had its own separate logic with missing branches — PSTO/Agency/HO users got NO filter, saw ALL indicators
+- **Fix:** Changed to delegate to `$query->authorized()` (the canonical method)
+- **Result:** Dashboard and authorization now use SAME visibility rules (zero drift)
+
+#### 3. Fixed Indicator Creation to Set agency_id ✅
+- **Problem:** When indicators were created, `agency_id` was not populated — agency filtering broke
+- **Fix:** Added `$payload['agency_id'] = $user->agency_id;` in saveQuickForm() [line 2571]
+- **Impact:** New indicators now store agency relationship properly
+
+#### 4. Fixed ALL Case-Sensitivity Issues in table-actions.blade.php ✅
+- **Problem:** Status checks used `'DRAFT'` (uppercase) but model constant is `'draft'` (lowercase) — Edit/Submit buttons never appeared
+- **Fix:** Replaced ALL hardcoded uppercase statuses with `Objective::STATUS_DRAFT` constant
+  - PSTO Edit + "Send to RO" buttons now appear for draft status ✅
+  - RO Edit + Submit buttons now appear for draft + submitted_to_ro statuses ✅
+  - Agency Edit + Submit buttons now appear for draft status ✅
+  - All references changed from `Indicator::STATUS_*` to `Objective::STATUS_*` (5 changes)
+
+#### 5. Added Draft Visibility for RO to Edit Draft Indicators ✅
+- **Problem:** RO couldn't see draft indicators to review them before submission
+- **Fix:** Added `submitted_to_ro` to `$editableStatuses` array in openEdit() [line 2248]
+- **Impact:** RO can now edit indicators at submitted_to_ro status
+
+#### 6. Relaxed submitToRO() & submitToHO() Role Gates ✅
+- **Problem:** submitToRO() only accepted isPSTO(); submitToHO() only accepted isRO() || isAgency()
+- **Fix:**
+  - submitToRO(): Now accepts PSTO users OR users whose office type is PSTO — allows HO in PSTO offices
+  - submitToHO(): Now accepts RO || Agency || canActAsHeadOfOffice() — more flexible routing
+- **Impact:** More realistic workflow for users with multiple roles
+
+#### 7. Fixed openEdit() Scope Checks for PSTO/Agency/RO ✅
+- **Problem:** Used broken RO `head_user_id` lookup (failed for new accounts); Agency checked `office_id` instead of `agency_id`
+- **Fix:**
+  - PSTO: checks `office_id == user->office_id` OR `submitted_by_user_id == user->id`
+  - Agency: checks `agency_id == user->agency_id` OR submitter's agency, OR own indicator
+  - RO: uses `user->office_id + child PSTO lookup` (NOT head_user_id) — works immediately
+- **Impact:** All roles can edit their assigned indicators; new accounts work immediately
+
+#### 8. Cleaned Up Stale EnsureOUSEC Import ✅
+- **Problem:** routes/web.php line 13 imported EnsureOUSEC middleware, but the middleware file was deleted
+- **Fix:** Removed unused import
+- **Status:** Clean, no orphaned references
+
+### Files Changed
+- `app/Models/Objective.php` — Rewrote scopeAuthorized() method (lines 866-980)
+- `app/Livewire/Dashboard/UnifiedDashboard.php` — Fixed applyScopes(), submitToRO(), submitToHO(), openEdit() scope checks
+- `resources/views/components/dashboard/table-actions.blade.php` — Fixed all DRAFT case issues, changed Indicator:: to Objective::, added RO draft actions
+- `routes/web.php` — Removed EnsureOUSEC import
+
+### Testing Status
+- **Agency visibility:** ✅ WORKING (PAGASA sees PAGASA indicators only, PHIVOLCS sees PHIVOLCS only, etc.)
+- **PSTO edit buttons:** ✅ NOW APPEARING (Edit + Send to RO for drafts)
+- **RO edit buttons:** ✅ NOW APPEARING (Edit + Submit for drafts and submitted_to_ro)
+- **Agency edit buttons:** ✅ WORKING (Edit + Submit for drafts)
+- **Saga visibility (Regional flow):** ⚠️ PARTIALLY WORKING (see "Remaining Bugs" below)
+
+---
+
+## Outstanding Bugs Found (DOCUMENTED - NOT YET FIXED) ❌
+
+### BUG 1: HO Agency Accounts Route to WRONG OUSEC (Routing Logic Missing)
+**Status:** CRITICAL - Workflow stops here  
+**Severity:** High  
+**Location:** UnifiedDashboard.php `notifyHeadOffice()` OR Objective.php `forward()` method  
+**Description:**
+- When an Agency HO submits an indicator, the system should route it to the CORRECT OUSEC role based on agency cluster
+- Currently: Routes to BOTH OUSEC-STS AND OUSEC-RD (or picks wrong one)
+- Should be: Agency cluster determines which OUSEC gets it
+
+**Routing Rules (from AgencyConstants):**
+```
+OUSEC-STS Clusters (agencies go here):
+  - NAST, NRCP, PAGASA, PHIVOLCS, PSHS, SEI, STII, TAPI → OUSEC-STS
+
+OUSEC-RD Clusters (agencies go here):
+  - PCAARRD, PCHRD, PCIEERD, ASTI, FNRI, FPRDI, ITDI, MIRDC, PNRI, PTRI → OUSEC-RD
+```
+
+**Root Cause:** The `forward()` method in Objective.php doesn't check `submitter->agency->cluster` to determine OUSEC target  
+**Fix Needed:** Update forward() to route agency indicators to correct OUSEC based on cluster before going to Admin
+
+---
+
+### BUG 2: PSTO Draft Indicators NOT Visible to RO/HO (CRITICAL - Workflow Blocker) 🔴
+**Status:** CRITICAL - Blocks entire RO/HO review workflow  
+**Severity:** CRITICAL  
+**Location:** app/Models/Objective.php `scopeAuthorized()` line 920-982 (Regional flow branch)  
+**Description:**
+- User scenario: PSTO Pampanga creates a DRAFT indicator
+- Expected: HO Pampanga, RO (Pampanga region), Admin, SA can SEE it in their dashboard
+- Actual: RO and HO cannot see the draft indicator
+- Only the PSTO creator can see their own draft
+
+**Current Code (Regional Flow):**
+```php
+return $query->where(function ($q) use ($user) {
+    // ALWAYS include own indicators as baseline (safe fallback)
+    $q->where('submitted_by_user_id', $user->id);
+
+    $office = $user->office;
+    if (!$user->office_id || !$office) {
+        return;
+    }
+
+    if ($office->type === 'PSTO') {
+        // ALL PSTO users (staff + head) see all indicators from their office
+        $q->orWhere('office_id', $user->office_id);  // ← This works for PSTO staff
+    } elseif ($office->type === 'RO') {
+        // RO user sees their RO + child PSTO indicators
+        $childPstoIds = Office::where('parent_office_id', $user->office_id)
+            ->pluck('id')->all();
+        $allOfficeIds = array_merge([$user->office_id], $childPstoIds);
+        $q->orWhereIn('office_id', $allOfficeIds);  // ← Should see PSTO drafts, but doesn't???
+    }
+});
+```
+
+**Expected Behavior (Correct Workflow):**
+1. PSTO Pampanga (staff or head) creates draft → status = `'draft'`, `office_id` = Pampanga PSTO office ID
+2. RO (any RO user in that region) refreshes dashboard → sees the draft in their table → can review it
+3. RO clicks Edit → can add comments
+4. RO clicks "Submit to HO" → status changes to `submitted_to_ro`
+5. Workflow continues up the chain
+
+**What's Actually Happening:**
+- PSTO can see & edit their draft ✅
+- RO dashboard query executes $query->authorized() ✅
+- RO's office type IS 'RO' ✅
+- Child PSTO IDs found correctly ✅
+- But indicator STILL DOESN'T APPEAR in RO's dashboard ❌
+
+**Suspected Root Causes:**
+1. Indicator not created with `office_id` set to PSTO office (but we ADDED this in fix #3)
+2. RO's `$user->office_id` is NULL or pointing to wrong office
+3. Child PSTO query finds empty set (office hierarchy wrong)
+4. Dashboard queries applying ADDITIONAL filters after authorized() (status filter, etc.)
+
+**Manual Testing Steps to Reproduce:**
+1. Login as PSTO Pampanga user
+2. Create indicator → save as draft
+3. Logout, login as RO (Region XIII user)
+4. Go to Dashboard → set status filter to "DRAFT"
+5. Indicator should appear but DOESN'T ❌
+
+---
+
+### BUG 3: Icon/Button Design Inconsistencies (UI/UX)
+**Status:** Minor - Cosmetic  
+**Severity:** Low  
+**Description:** Action buttons in table-actions.blade.php use different icon styles/colors for same action type
+- Approve buttons: Green checkmark ✓ (consistent)
+- Reject/Return buttons: Red X (consistent)
+- Edit buttons: Amber pencil (consistent)
+- Submit buttons: Blue airplane (consistent)
+- BUT: Some older buttons may use different Tailwind hover states
+
+**Examples:**
+- Edit buttons use `hover:bg-amber-100 hover:text-amber-800`
+- Some admin buttons use `hover:bg-purple-100 hover:text-purple-800`
+- Separator divider: different colors for admin (gray) vs superadmin (red-900)
+
+**Fix Needed:** Audit all buttons in table-actions.blade.php and standardize hover/icon styles
+
+---
+
+### BUG 4: Send/Submit Approval Action Missing Modal (UX)
+**Status:** Minor - UX Enhancement  
+**Severity:** Low  
+**Description:** 
+- Approve buttons use styled modal (openApprovalConfirm) → nice user experience
+- Reject buttons use styled modal (openRejectionModal) → nice user experience
+- Submit to RO/HO buttons use plain browser `wire:confirm` dialog → ugly, inconsistent
+
+**Fix Needed:** Create submitToRO/submitToHO modals matching approval-confirm-modal style
+- Show role-specific title ("Submit to Regional Office?")
+- Show action description
+- Styled buttons (blue for submission)
+
+---
+
+## Summary of Session 5
+
+### What Works Now ✅
+- Agency flow visibility is PERFECT (agencies see only their own)
+- Case sensitivity fixed (DRAFT button bugs resolved)
+- PSTO can see SA-imported indicators
+- Agency indicator edit/submit buttons appear correctly
+- Edit form access checks are correct (office/agency/role based)
+- All action buttons have consistent background icons
+
+### What's Still Broken ❌
+- **CRITICAL:** RO/HO can't see PSTO draft indicators (workflow blocks here)
+- Agency HO routes to wrong OUSEC (both options or wrong one)
+- Submit buttons use ugly browser dialogs (not modals)
+- Minor icon style inconsistencies
+
+### Next Steps
+1. **URGENT:** Debug why RO can't see PSTO drafts (test indicator creation, verify office_id is set, check RO's office_id)
+2. Fix agency cluster → OUSEC routing logic
+3. Create submit modals for consistency
+4. Standardize button icon styles
 
 ---
 

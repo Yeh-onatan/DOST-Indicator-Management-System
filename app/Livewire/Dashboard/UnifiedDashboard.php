@@ -907,7 +907,11 @@ class UnifiedDashboard extends Component
             $objective = Objective::find($id);
             $user = Auth::user();
 
-            if ($objective && $user->isPSTO()) {
+            // Allow PSTO users, or any user whose office is a PSTO (e.g. head_officer in PSTO)
+            $canSubmit = $user->isPSTO()
+                || ($user->office && $user->office->type === 'PSTO');
+
+            if ($objective && $canSubmit) {
                 $objective->submitToRO();
                 $this->dispatch('toast', message: 'Submitted to Regional Office', type: 'success');
                 $this->notifyRegionalOffice($objective->region_id, $objective, 'submitted_to_ro');
@@ -924,7 +928,10 @@ class UnifiedDashboard extends Component
             $objective = Objective::find($id);
             $user = Auth::user();
 
-            if ($objective && ($user->isRO() || $user->isAgency())) {
+            // Allow RO, Agency, or any head-of-office user
+            $canSubmit = $user->isRO() || $user->isAgency() || $user->canActAsHeadOfOffice();
+
+            if ($objective && $canSubmit) {
                 $objective->submitToHO();
                 $this->dispatch('toast', message: 'Submitted to Head of Office', type: 'success');
                 $this->notifyHeadOffice($objective, 'submitted_to_ho');
@@ -1815,8 +1822,8 @@ class UnifiedDashboard extends Component
 
     public function openCreate(): void
     {
-        if (!Auth::user()->isPSTO() && !Auth::user()->isAgency()) {
-            $this->dispatch('toast', message: 'Only PSTO and Agency accounts can create indicators.', type: 'error');
+        if (!Auth::user()->isPSTO() && !Auth::user()->isAgency() && !Auth::user()->isRO() && !Auth::user()->isSuperAdmin()) {
+            $this->dispatch('toast', message: 'Only PSTO, Agency, RO, and Super Admin accounts can create indicators.', type: 'error');
             return;
         }
         $this->dispatch('open-unified-form')->to(\App\Livewire\Indicators\UnifiedIndicatorForm::class);
@@ -1969,25 +1976,19 @@ class UnifiedDashboard extends Component
         // Use fresh() to ensure we get the latest data from database, not cached
         $objective = Objective::with('chapter')->findOrFail($id)->fresh();
 
-        // Basic authorization: Only check if explicitly denied (should match query scoping)
-        // This is a secondary check - primary scoping is in render() query
-        if (!$user->isSA() && !$user->isAdministrator()) {
-            // For non-admin users, do basic scope validation
-            if ($user->isPSTO() || $user->isAgency()) {
-                // Allow if user created it OR it belongs to their office
-                $hasAccess = $objective->submitted_by_user_id == $user->id
-                    || $objective->office_id == $user->office_id;
-                if (!$hasAccess) {
-                    // Log the denied access instead of aborting for debugging
-                    \Log::warning('Access denied to indicator', [
-                        'user_id' => $user->id,
-                        'user_role' => $user->role,
-                        'indicator_id' => $id,
-                        'indicator_office' => $objective->office_id,
-                        'user_office' => $user->office_id,
-                    ]);
-                    return; // Silently return instead of aborting
-                }
+        // Authorization check: Use scopeAuthorized to determine if user can access this indicator
+        // This ensures consistency with the dashboard query
+        $authorizedIndicators = Objective::authorized()->pluck('id');
+        
+        if (!$user->isSA() && !$user->isAdministrator() && !$user->isExecom()) {
+            if (!$authorizedIndicators->contains($id)) {
+                \Log::warning('Access denied to indicator', [
+                    'user_id' => $user->id,
+                    'user_role' => $user->role,
+                    'indicator_id' => $id,
+                ]);
+                $this->dispatch('toast', message: 'You do not have permission to view this indicator.', type: 'error');
+                return;
             }
         }
 
@@ -2236,7 +2237,7 @@ class UnifiedDashboard extends Component
         }
 
         // Standard edit flow with workflow restrictions
-        $editableStatuses = [Objective::STATUS_DRAFT, 'rejected', 'returned_to_psto', 'returned_to_agency', 'returned_to_ro'];
+        $editableStatuses = [Objective::STATUS_DRAFT, 'rejected', 'returned_to_psto', 'returned_to_agency', 'returned_to_ro', 'submitted_to_ro'];
 
         // SA and Admin can edit anything (without explicit admin mode)
         if (!$user->isSA() && !$user->isAdministrator()) {
@@ -2259,28 +2260,28 @@ class UnifiedDashboard extends Component
             }
 
             // Scope check
-            if ($user->isPSTO() || $user->isAgency()) {
+            if ($user->isPSTO()) {
                 if ($objective->office_id != $user->office_id && $objective->submitted_by_user_id != $user->id) {
                     $this->dispatch('toast', message: 'You do not have permission to edit this indicator.', type: 'error');
                     return;
                 }
+            } elseif ($user->isAgency()) {
+                // Agency users match by agency_id (direct column or submitter's agency)
+                $matchesAgency = ($objective->agency_id == $user->agency_id)
+                    || ($objective->submitter && $objective->submitter->agency_id == $user->agency_id);
+                if (!$matchesAgency && $objective->submitted_by_user_id != $user->id) {
+                    $this->dispatch('toast', message: 'You do not have permission to edit this indicator.', type: 'error');
+                    return;
+                }
             } elseif ($user->isRO()) {
-                // RO can edit objectives from offices where they are head + child PSTO offices
-                $roOffices = \App\Models\Office::where('head_user_id', $user->id)
-                    ->where('type', 'RO')
-                    ->pluck('id');
+                // RO can edit indicators from their office + child PSTO offices
+                $childPstoIds = \App\Models\Office::where('parent_office_id', $user->office_id)
+                    ->pluck('id')
+                    ->all();
+                $allOfficeIds = array_merge([$user->office_id], $childPstoIds);
 
-                if ($roOffices->isNotEmpty()) {
-                    $childPstoOfficeIds = \App\Models\Office::whereIn('parent_office_id', $roOffices)
-                        ->pluck('id');
-                    $allOfficeIds = $roOffices->concat($childPstoOfficeIds)->unique()->toArray();
-
-                    if (!in_array($objective->office_id, $allOfficeIds)) {
-                        $this->dispatch('toast', message: 'You do not have permission to edit this indicator.', type: 'error');
-                        return;
-                    }
-                } else {
-                    $this->dispatch('toast', message: 'You are not assigned as head of any office.', type: 'error');
+                if (!in_array($objective->office_id, $allOfficeIds)) {
+                    $this->dispatch('toast', message: 'You do not have permission to edit this indicator.', type: 'error');
                     return;
                 }
             }
@@ -2405,8 +2406,8 @@ class UnifiedDashboard extends Component
 
         // B. Handle Standard Create/Edit Mode
         $user = Auth::user();
-        if (!$this->editingQuickFormId && !$user->isPSTO() && !$user->isAgency()) {
-            $this->dispatch('toast', message: 'Only PSTO and Agency accounts can create indicators.', type: 'error');
+        if (!$this->editingQuickFormId && !$user->isPSTO() && !$user->isAgency() && !$user->isRO() && !$user->isSuperAdmin()) {
+            $this->dispatch('toast', message: 'Only PSTO, Agency, RO, and Super Admin accounts can create indicators.', type: 'error');
             return;
         }
         $catSlug = $this->resolveCategoryFlow($this->quickForm['category'] ?? '');
@@ -2577,6 +2578,7 @@ class UnifiedDashboard extends Component
         if ($user) {
             $payload['office_id'] = $user->office_id;
             $payload['region_id'] = $user->region_id;
+            $payload['agency_id'] = $user->agency_id;
         }
         if ($catDef) {
             $payload['is_mandatory'] = $catDef->is_mandatory;
@@ -3551,77 +3553,16 @@ class UnifiedDashboard extends Component
     public function closePdpView(): void { $this->showPdpView = false; }
     public function formatStatus(?string $status): string { return $status ?: ''; }
 
+    /**
+     * Apply role-based visibility scoping.
+     *
+     * Delegates to Objective::scopeAuthorized() — the single canonical
+     * visibility method — so dashboard queries and authorization checks
+     * always use the same rules.
+     */
     private function applyScopes($query, $user)
     {
-        // A. Super Admin / Admin: View All
-        if ($user->isSA() || $user->isAdministrator() || $user->isSuperAdmin()) {
-            return;
-        }
-
-        // B. OUSEC View: See indicators based on role
-        if ($user->isOUSEC()) {
-            // OUSEC-RO sees all regional/PSTO indicators at OUSEC level and above
-            if ($user->isOUSEROR()) {
-                $query->where(function($sub) {
-                    $sub->whereNotNull('office_id')
-                         ->whereNotNull('region_id');
-                })->whereIn('status', [
-                    'submitted_to_ousec',
-                    'submitted_to_admin',
-                    'submitted_to_superadmin',
-                    'approved'
-                ]);
-            }
-            // OUSEC-STS and OUSEC-RD see agency indicators by cluster
-            else {
-                $allowedClusters = $user->getOUSECClusters();
-                $query->whereHas('submitter.agency', function($agencyQuery) use ($allowedClusters) {
-                    $agencyQuery->whereIn('cluster', $allowedClusters);
-                })->whereIn('status', [
-                    'submitted_to_ousec',
-                    'submitted_to_admin',
-                    'submitted_to_superadmin',
-                    'approved'
-                ]);
-            }
-            return;
-        }
-
-        if ($user->isRO()) {
-            // Find all offices where this RO is the head (from Office Manager)
-            $roOffices = \App\Models\Office::where('head_user_id', $user->id)
-                ->where('type', 'RO')
-                ->get();
-
-            if ($roOffices->isNotEmpty()) {
-                // Get RO office IDs and all their child PSTO office IDs
-                $roOfficeIds = $roOffices->pluck('id');
-                $childPstoOfficeIds = \App\Models\Office::whereIn('parent_office_id', $roOfficeIds)
-                    ->pluck('id');
-
-                // Combine both RO offices and their child PSTO offices
-                $allOfficeIds = $roOfficeIds->concat($childPstoOfficeIds)->unique();
-                $query->whereIn('office_id', $allOfficeIds);
-            } else {
-                // RO is not assigned as head of any office - show nothing
-                $query->where('id', 0);
-            }
-        }
-        // C. Agency-assigned HO: Only see indicators from that agency (by submitter's agency_id)
-        elseif ($user->canActAsHeadOfOffice() && $user->agency_id) {
-            $query->whereHas('submitter', function($sub) use ($user) {
-                $sub->where('agency_id', $user->agency_id);
-            })->whereIn('status', [
-                \App\Models\Objective::STATUS_SUBMITTED_TO_HO,
-                \App\Models\Objective::STATUS_RETURNED_TO_HO,
-                \App\Models\Objective::STATUS_SUBMITTED_TO_OUSEC,
-                \App\Models\Objective::STATUS_RETURNED_TO_OUSEC,
-                \App\Models\Objective::STATUS_SUBMITTED_TO_ADMIN,
-                \App\Models\Objective::STATUS_RETURNED_TO_ADMIN,
-                \App\Models\Objective::STATUS_SUBMITTED_TO_SUPERADMIN,
-                \App\Models\Objective::STATUS_APPROVED,
-            ]);
-        }
+        $query->authorized();
     }
 
     private function applyFilters($query)
